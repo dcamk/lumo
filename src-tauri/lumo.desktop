@@ -1,0 +1,26 @@
+[Desktop Entry]
+Name={{name}}
+GenericName=Assistente de foco
+Comment=Assistente de foco que mora no topo da tela
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=lumo;foco;pomodoro;tarefas;lembrete;ia;gmail;sistema;produtividade;
+StartupWMClass=lumo-assistant
+StartupNotify=false
+X-GNOME-UsesNotifications=true
+Actions=toggle;mail;system;
+
+[Desktop Action toggle]
+Name=Abrir / fechar painel
+Exec={{exec}} --toggle
+
+[Desktop Action mail]
+Name=E-mails
+Exec={{exec}} --tab=mail
+
+[Desktop Action system]
+Name=Sistema
+Exec={{exec}} --tab=linux

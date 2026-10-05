@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
+  "productName": "Lumo",
+  "version": "1.7.0",
+  "identifier": "com.lumo.assistant",
+  "build": {
+    "beforeDevCommand": "PORT=1420 npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lumo",
+        "width": 640,
+        "height": 300,
+        "minWidth": 160,
+        "minHeight": 60,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "maximizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "appimage"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "lumo.desktop",
+        "section": "utils"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "shortDescription": "Assistente de foco que mora no topo da tela",
+    "longDescription": "Lumo: pílula animada no topo da tela com tarefas e lembretes, foco (Pomodoro + Não Perturbe), IA com provedores gratuitos, avisos do Gmail e monitor do sistema para Linux.",
+    "category": "Utility",
+    "copyright": "© 2026 Dalmácio"
+  }
+}
