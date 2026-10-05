@@ -68,7 +68,7 @@ Sugestões, correções e melhorias são bem-vindas:
 ## Instalar
 
 ```bash
-git clone <URL-DESTE-REPOSITORIO> lumo && cd lumo
+git clone https://github.com/dcamk/lumo.git lumo && cd lumo
 ./install.sh            # instala dependências, compila, instala o .deb e abre o Lumo
 ./install.sh --build    # força recompilar
 ./uninstall.sh          # remove (--purge apaga também configurações e a conta Google)
