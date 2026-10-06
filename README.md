@@ -4,10 +4,6 @@ Assistente de área de trabalho para Linux: uma pílula preta no topo da tela co
 Tarefas com lembretes, foco (Pomodoro), terminal, avisos de e-mail, painel do sistema e uma **IA com
 equipe de agentes** que roda comandos, lembra de você e usa skills e plugins. Funciona sem chave de API.
 
-![Expressões do Lumo](docs/images/expressoes.png)
-
-Feito com Tauri 2 (Rust), React, Vite, Tailwind e [anime.js](https://animejs.com). Inspirado no
-[Coucou](https://github.com/Louis-CFM/coucou).
 
 ## Instalar
 
@@ -167,9 +163,5 @@ src-tauri/src/
 src-tauri/gnome-extension/ extensão do cursor
 ```
 
-## Segurança
-
-O repositório não contém chaves, tokens nem dados pessoais. `.env*`, `google-client.json`, `instalador/` e
-`src-tauri/target/` estão no `.gitignore`.
 
 Licença: [MIT](LICENSE).
