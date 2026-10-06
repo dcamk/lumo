@@ -342,6 +342,9 @@ pub async fn brain_send(req: SendReq, events: Channel<AgentEvent>) -> Result<(),
     let tools = tools::defs(true).await;
     let result = run_loop(Role::Main, main_system(req.persona.as_deref()), memory::history(), tools, &ctx, MAIN_STEPS, true).await;
     let transcript = ctx.transcript.lock().unwrap_or_else(|e| e.into_inner()).join("\n");
+    if result.is_err() && transcript.trim().is_empty() {
+        memory::drop_last_user(&req.text);
+    }
     memory::push_turn("assistant", &transcript);
     tauri::async_runtime::spawn(compact());
     match result {

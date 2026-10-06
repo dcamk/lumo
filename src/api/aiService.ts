@@ -73,7 +73,7 @@ export function classifyError(err: unknown): FailKind {
   if (/http 429\b/.test(e) || e.includes('quota') || e.includes('rate limit') || e.includes('rate_limit')) return 'limit';
   if (e.includes('tempo esgotado') || e.includes('timed out') || e.includes('timeout') || e.includes('aborterror')) return 'timeout';
   if (/http 5\d\d\b/.test(e) || e.includes('overloaded') || e.includes('failed to fetch') || e.includes('networkerror') || e.includes('não consegui conectar')) return 'server';
-  if (/http 40[13]\b/.test(e) || e.includes('api key') || e.includes('unauthorized')) return 'auth';
+  if (/http 40[123]\b/.test(e) || e.includes('api key') || e.includes('unauthorized') || e.includes('insufficient balance')) return 'auth';
   return 'other';
 }
 

@@ -11,7 +11,7 @@ progresso de uma tarefa.
 | `Server` | HTTP 5xx, “overloaded”, conexão recusada/caída | troca na hora; pausa curta de 60 s |
 | `Timeout` | sem resposta dentro do limite | troca na hora; pausa de 5 min |
 | `Unsupported` | o modelo recusou `tools` | vai para o fim da fila (ver item 2) |
-| `Auth` | HTTP 401/403, chave inválida | marcado como reprovado até novo teste |
+| `Auth` | HTTP 401/402/403, chave inválida, sem saldo | marcado como reprovado até novo teste |
 | `Other` | demais erros | passa ao próximo; pausa de 2 min |
 
 `Fail::recoverable()` / `isRecoverable()` marcam as falhas passageiras. Nenhuma delas repete o pedido

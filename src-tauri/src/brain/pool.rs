@@ -230,6 +230,14 @@ pub async fn configure(cfgs: HashMap<String, Cfg>, preferred: String) {
         st.slots = slots;
     });
     probe_due().await;
+    // diagnóstico (sem chaves): quem está pronto, em pausa ou reprovado
+    for i in status() {
+        eprintln!(
+            "[Lumo/pool] {} · ok={:?} ferramentas={:?} latência={:?} pausa={}s nota={}{}",
+            i.key, i.ok, i.tools, i.latency_ms, i.cooldown_secs, i.score,
+            if i.error.is_empty() { String::new() } else { format!(" · erro: {}", i.error) }
+        );
+    }
 }
 
 fn probe_interval(s: &Slot) -> u64 {

@@ -92,7 +92,7 @@ pub fn classify(err: &str) -> Fail {
         Fail::Timeout
     } else if is_server_error(&e) {
         Fail::Server
-    } else if e.contains("http 401") || e.contains("http 403") || e.contains("api key") || e.contains("unauthorized") {
+    } else if e.contains("http 401") || e.contains("http 402") || e.contains("http 403") || e.contains("api key") || e.contains("unauthorized") || e.contains("insufficient balance") {
         Fail::Auth
     } else {
         Fail::Other

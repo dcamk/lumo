@@ -137,10 +137,9 @@ pub fn history() -> Vec<Msg> {
         let mut out: Vec<Msg> = Vec::new();
         for t in &s.turns {
             match (t.role.as_str(), out.last_mut()) {
-                ("user", Some(Msg::User(prev))) => {
-                    prev.push_str("\n\n");
-                    prev.push_str(&t.text)
-                }
+                // fala anterior que ficou sem resposta (falha): vale só a mais recente —
+                // juntar as duas fazia o modelo responder ao pedido velho
+                ("user", Some(Msg::User(prev))) => *prev = t.text.clone(),
                 ("user", _) => out.push(Msg::User(t.text.clone())),
                 (_, Some(Msg::Assistant { text, .. })) => {
                     text.push_str("\n\n");
@@ -161,6 +160,15 @@ pub fn push_turn(role: &str, text: &str) {
         return;
     }
     with(|s| s.turns.push(Turn { role: role.into(), text: text.into() }));
+}
+
+/// O pedido falhou sem nada feito: tira a fala do usuário da conversa
+pub fn drop_last_user(text: &str) {
+    with(|s| {
+        if s.turns.last().is_some_and(|t| t.role == "user" && t.text == text) {
+            s.turns.pop();
+        }
+    });
 }
 
 /// Nova conversa: apaga a conversa e o resumo, mantém os fatos

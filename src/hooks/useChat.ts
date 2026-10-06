@@ -73,12 +73,11 @@ interface Resume {
 const RESUME_DELAY_MS = 4000;
 
 /** Pedido de retomada: o próximo provedor recebe o progresso e continua dali */
-function resumeText(r: Resume, extra?: string) {
+function resumeText(r: Resume) {
   const steps = r.done.map((l) => `- ${l}`).join('\n');
   return (
     `[Retomada] A tarefa anterior foi interrompida porque o provedor caiu. Pedido original:\n${r.request}\n\n` +
-    `Já concluído (NÃO repita estes passos; continue de onde parou):\n${steps}` +
-    (extra ? `\n\nNova mensagem do usuário: ${extra}` : '')
+    `Já concluído (NÃO repita estes passos; continue de onde parou):\n${steps}`
   );
 }
 
@@ -120,7 +119,7 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
   const draft = useRef<{ id: string; text: string } | null>(null);
   // Progresso da tarefa em andamento (vem do backend se ninguém responder) e a retomada pendente
   const progress = useRef<string[]>([]);
-  const pendingResume = useRef<Resume | null>(null);
+
 
   const onEvent = useCallback(
     (e: AgentEvent) => {
@@ -211,27 +210,18 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
       if (isTauri()) {
         // O modelo principal (backend) cuida de tudo: memória, escolha de provedor,
         // especialistas e falhas. Aqui só chega o que ele decidiu mostrar.
-        // Se a última tarefa caiu no meio, este pedido leva junto o que já foi feito.
         const request = withFiles(text, files);
-        const resume = pendingResume.current;
-        pendingResume.current = null;
-        const full = resume ? resumeText(resume, request) : request;
         try {
-          await callBrain(full);
+          await callBrain(request);
         } catch (err) {
           const done = progress.current;
           if (!done.length || CANCELLED_RE.test(String(err))) throw err;
           // caiu no meio, com passos prontos: tenta uma vez de novo, em outro provedor, sem refazer
-          const r: Resume = { request: resume ? resume.request : request, done: [...(resume?.done ?? []), ...done] };
+          const r: Resume = { request, done };
           setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'notice', text: `O provedor caiu no meio da tarefa — retomando em outro (${r.done.length} passos já feitos).` }]);
           await new Promise((ok) => setTimeout(ok, RESUME_DELAY_MS));
-          try {
-            await callBrain(resumeText(r));
-          } catch (err2) {
-            // guarda: a próxima mensagem continua de onde parou
-            pendingResume.current = { request: r.request, done: [...r.done, ...progress.current] };
-            throw err2;
-          }
+          // (se falhar de novo, os passos feitos já estão na memória da conversa)
+          await callBrain(resumeText(r));
         }
       } else {
         // Navegador (npm run dev): só conversa, sem terminal nem equipe — com failover entre provedores
@@ -255,7 +245,7 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
     } catch (err) {
       failed = true;
       const msg = err instanceof Error ? err.message : String(err);
-      note(pendingResume.current ? `${msg} Quando quiser, mande qualquer mensagem que eu continuo de onde parei.` : msg);
+      note(msg);
     }
     setLoading(false);
     onDone(!failed);
@@ -280,7 +270,6 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
   const clear = useCallback(() => {
     void invoke('agent_cancel').catch(() => {});
     void invoke('brain_reset').catch(() => {});
-    pendingResume.current = null;
     progress.current = [];
     setItems([WELCOME]);
   }, []);

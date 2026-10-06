@@ -65,7 +65,7 @@ Terminal=false
 DESK
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
   say "AppImage instalado em ~/.local/bin/Lumo.AppImage"
-  setsid -f env APPIMAGE_EXTRACT_AND_RUN=1 "$HOME/.local/bin/Lumo.AppImage" >/dev/null 2>&1 </dev/null || true
+  setsid -f env -u GDK_BACKEND APPIMAGE_EXTRACT_AND_RUN=1 "$HOME/.local/bin/Lumo.AppImage" >/dev/null 2>&1 </dev/null || true
   exit 0
 fi
 
@@ -96,7 +96,7 @@ fi
 
 # ---- 4. abrir ------------------------------------------------------------------------------
 say "Abrindo o Lumo"
-setsid -f /usr/bin/lumo-assistant >/dev/null 2>&1 </dev/null || true
+env -u GDK_BACKEND setsid -f /usr/bin/lumo-assistant >/dev/null 2>&1 </dev/null || true
 
 cat <<EOF
 

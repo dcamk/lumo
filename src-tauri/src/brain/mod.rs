@@ -149,6 +149,7 @@ mod tests {
         assert_eq!(classify("tempo esgotado: LLM7 parou de responder por 45 s"), Fail::Timeout);
         assert_eq!(classify("ferramentas não suportadas — HTTP 400 — x respondeu: tools not supported"), Fail::Unsupported);
         assert_eq!(classify("HTTP 401 — Groq respondeu: Invalid API Key"), Fail::Auth);
+        assert_eq!(classify("HTTP 402 — LLM7 respondeu: Insufficient balance. Please top up"), Fail::Auth);
         assert_eq!(classify("HTTP 400 — Groq respondeu: context length"), Fail::Other);
         assert!(Fail::Server.recoverable() && Fail::Limit.recoverable() && !Fail::Auth.recoverable());
     }

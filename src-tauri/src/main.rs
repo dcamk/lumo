@@ -57,8 +57,11 @@ fn prepare_linux_env() {
         // Wayland não deixa o app posicionar a própria janela (nem "sempre no topo").
         // Rodando via XWayland o Lumo nasce no topo central e fica acima das janelas.
         // Para manter Wayland nativo: LUMO_WAYLAND=1
+        // GDK_BACKEND=wayland herdado (ex.: aberto de um terminal de app Electron) também é
+        // trocado: em Wayland nativo a janela transparente deixa rastros na tela.
         let wayland = std::env::var("XDG_SESSION_TYPE").map(|v| v == "wayland").unwrap_or(false);
-        if wayland && unset("GDK_BACKEND") && std::env::var("LUMO_WAYLAND").as_deref() != Ok("1") {
+        let inherited_wayland = std::env::var("GDK_BACKEND").map(|v| v.starts_with("wayland")).unwrap_or(false);
+        if wayland && (unset("GDK_BACKEND") || inherited_wayland) && std::env::var("LUMO_WAYLAND").as_deref() != Ok("1") {
             std::env::set_var("GDK_BACKEND", "x11");
         }
 
