@@ -17,7 +17,8 @@ use std::time::Duration;
 use tauri::Manager;
 
 /// Pedido vindo da linha de comando: `--toggle`, `--tab=<aba>` (ações do menu de apps)
-/// ou `--ask=<pedido>` / `--ask <pedido>` (abre o chat e envia — bom para atalhos)
+/// `--ask=<pedido>` / `--ask <pedido>` (abre o chat e envia — bom para atalhos)
+/// ou `--notice "Título | texto"` (só avisa)
 fn cli_action(args: &[String]) -> Option<String> {
     if args.iter().any(|a| a == "--toggle") {
         return Some("toggle".into());
@@ -29,6 +30,16 @@ fn cli_action(args: &[String]) -> Option<String> {
         };
         if !text.trim().is_empty() {
             return Some(format!("ask:{}", text.trim()));
+        }
+    }
+    // `--notice "Título | texto"`: aviso na pílula + notificação do sistema (usado por automações)
+    if let Some(i) = args.iter().position(|a| a == "--notice" || a.starts_with("--notice=")) {
+        let text = match args[i].strip_prefix("--notice=") {
+            Some(t) => t.to_string(),
+            None => args.get(i + 1).cloned().unwrap_or_default(),
+        };
+        if !text.trim().is_empty() {
+            return Some(format!("notice:{}", text.trim()));
         }
     }
     args.iter()

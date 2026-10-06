@@ -10,3 +10,4 @@ src-tauri/target/
 src-tauri/gen/
 instalador/
 src-tauri/google-client.json
+ferramentas/

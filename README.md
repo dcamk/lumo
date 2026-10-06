@@ -46,6 +46,11 @@ mais fôlego; OpenAI e Claude também funcionam. As chaves ficam só neste PC.
 - **Skills**: pastas com `SKILL.md`. Instale por `dono/repo`, pasta ou URL (Config → Agente ou pelo chat).
 - **Plugins MCP**: servidores MCP por stdio (ex.: `npx -y @modelcontextprotocol/server-filesystem ~`).
   Cada uso pede aprovação, a menos que o plugin esteja marcado como confiável.
+- **Failover sem perder o fio**: limite (429), servidor fora do ar (5xx), rede caída ou lentidão
+  trocam de provedor na hora, sem insistir no mesmo. Quem não aceita ferramentas não é forçado a
+  simulá-las: o próximo provedor compatível assume (o modo texto fica só como último recurso). Quem
+  assume uma tarefa no meio recebe o resumo do que já foi feito e não repete. Detalhes em
+  [`docs/continuidade-e-failover.md`](docs/continuidade-e-failover.md).
 - A resposta aparece aos poucos. Arquivos arrastados para o Lumo chegam à IA com o caminho real.
 
 Dados do cérebro em `~/.config/com.lumo.assistant/`: `memory.json`, `plugins.json`, `skills/`.
@@ -93,6 +98,7 @@ a menos que o app seja publicado. Escopos: `gmail.readonly` e `drive.file`. O to
 lumo-assistant --toggle              # abre/fecha o painel
 lumo-assistant --tab=chat            # abre numa aba (tasks, focus, chat, mail, linux, settings)
 lumo-assistant --ask "instale o VLC" # abre o chat e envia o pedido
+lumo-assistant --notice "Título | texto"  # aviso na pílula + notificação do sistema
 ```
 
 ## Olhos fora da janela (GNOME Wayland)

@@ -140,6 +140,20 @@ mod tests {
     }
 
     #[test]
+    fn erros_classificados_para_failover() {
+        use super::llm::{classify, Fail};
+        assert_eq!(classify("HTTP 429 — Groq respondeu: Rate limit reached"), Fail::Limit);
+        assert_eq!(classify("HTTP 503 — Gemini respondeu: The model is overloaded"), Fail::Server);
+        assert_eq!(classify("HTTP 502 — OpenRouter respondeu: bad gateway"), Fail::Server);
+        assert_eq!(classify("Não consegui conectar ao Mistral: error sending request"), Fail::Server);
+        assert_eq!(classify("tempo esgotado: LLM7 parou de responder por 45 s"), Fail::Timeout);
+        assert_eq!(classify("ferramentas não suportadas — HTTP 400 — x respondeu: tools not supported"), Fail::Unsupported);
+        assert_eq!(classify("HTTP 401 — Groq respondeu: Invalid API Key"), Fail::Auth);
+        assert_eq!(classify("HTTP 400 — Groq respondeu: context length"), Fail::Other);
+        assert!(Fail::Server.recoverable() && Fail::Limit.recoverable() && !Fail::Auth.recoverable());
+    }
+
+    #[test]
     fn texto_vira_chamada() {
         let (rest, calls) = parse_text_calls_pub("vou ver\n<tool_call>{\"name\":\"hora\",\"arguments\":{\"cidade\":\"Tokyo\"}}</tool_call>", &[hora()]);
         assert_eq!(rest, "vou ver");

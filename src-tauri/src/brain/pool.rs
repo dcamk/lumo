@@ -325,6 +325,8 @@ fn fail(s: &mut Slot, err: &str) {
     let (ok, wait) = match classify(err) {
         Fail::Limit => (None, hinted.map_or(900, |n| (n + 5).clamp(30, 3600))),
         Fail::Timeout => (None, 300),
+        // 5xx/rede: castigo curto — costuma voltar logo
+        Fail::Server => (None, 60),
         Fail::Auth => (Some(false), 3600),
         Fail::Unsupported => (None, 0),
         Fail::Other => (None, 120),

@@ -39,8 +39,11 @@ pub enum AgentEvent {
     WriteDone { id: String, approved: bool, error: Option<String> },
     /// A IA leu um arquivo
     Read { path: String },
-    /// O provedor não suporta ferramentas: o Lumo trocou para o modo texto
+    /// Aviso curto no chat
     Notice { text: String },
+    /// Nenhum provedor respondeu no meio de uma tarefa: passos já concluídos, para a
+    /// interface retomar (em outro provedor) sem refazer o trabalho
+    Interrupted { done: Vec<String> },
 }
 
 static PENDING: Mutex<Option<HashMap<String, oneshot::Sender<bool>>>> = Mutex::new(None);

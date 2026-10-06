@@ -68,9 +68,18 @@ fn client() -> &'static reqwest::Client {
 pub enum Fail {
     Limit,
     Timeout,
+    /// Servidor fora do ar, sobrecarregado ou conexão caída (5xx, rede)
+    Server,
     Auth,
     Unsupported,
     Other,
+}
+
+impl Fail {
+    /// Falhas passageiras do provedor: troca na hora para o próximo, sem insistir no mesmo
+    pub fn recoverable(&self) -> bool {
+        matches!(self, Fail::Limit | Fail::Timeout | Fail::Server | Fail::Unsupported)
+    }
 }
 
 pub fn classify(err: &str) -> Fail {
@@ -79,13 +88,28 @@ pub fn classify(err: &str) -> Fail {
         Fail::Unsupported
     } else if e.contains("http 429") || e.contains("quota") || e.contains("rate limit") || e.contains("rate_limit") {
         Fail::Limit
-    } else if e.contains("tempo esgotado") || e.contains("timed out") {
+    } else if e.contains("tempo esgotado") || e.contains("timed out") || e.contains("timeout") {
         Fail::Timeout
+    } else if is_server_error(&e) {
+        Fail::Server
     } else if e.contains("http 401") || e.contains("http 403") || e.contains("api key") || e.contains("unauthorized") {
         Fail::Auth
     } else {
         Fail::Other
     }
+}
+
+/// HTTP 5xx, sobrecarga ou rede caída (as mensagens vêm de `post`/`send_stream`)
+fn is_server_error(e: &str) -> bool {
+    let http5 = e.find("http 5").is_some_and(|i| e[i + 6..].chars().take(2).all(|c| c.is_ascii_digit()));
+    http5
+        || e.contains("overloaded")
+        || e.contains("service unavailable")
+        || e.contains("bad gateway")
+        || e.contains("não consegui conectar")
+        || e.contains("conexão com")
+        || e.contains("connection reset")
+        || e.contains("connection refused")
 }
 
 fn rate_of(headers: &reqwest::header::HeaderMap) -> Rate {

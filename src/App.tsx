@@ -259,7 +259,15 @@ export default function App() {
       openPanel('chat');
       void chat.send(action.slice(4));
     }
-    else if (action === 'mute') setSettings((prev) => ({ ...prev, muted: !prev.muted }));
+    else if (action.startsWith('notice:')) {
+      // "Título | texto" — avisos vindos de fora (ex.: automação que vigia o repositório)
+      const [title, ...rest] = action.slice(7).split('|');
+      const text = rest.join('|').trim();
+      sound.playChirp();
+      flash('curious', 1800);
+      showNotice({ kind: 'system', title: title.trim() || 'Aviso', text, action: () => void changeMode('quick') });
+      systemNotify(title.trim() || 'Aviso', text);
+    } else if (action === 'mute') setSettings((prev) => ({ ...prev, muted: !prev.muted }));
   };
   useEffect(() => {
     const off = listen<string>('lumo://action', (a) => actionRef.current(a));

@@ -1,6 +1,6 @@
 import { Channel } from '@tauri-apps/api/core';
 import { useCallback, useRef, useState } from 'react';
-import { streamChat, type Turn } from '../api/aiService';
+import { streamChatFailover, type Turn } from '../api/aiService';
 import { sound } from '../audio/SoundEngine';
 import { invoke, isTauri } from '../lib/tauri';
 import { getPalette } from '../theme/store';
@@ -59,7 +59,30 @@ type AgentEvent =
   | { type: 'write'; id: string; path: string; preview: string; needs_approval: boolean }
   | { type: 'write_done'; id: string; approved: boolean; error: string | null }
   | { type: 'read'; path: string }
-  | { type: 'notice'; text: string };
+  | { type: 'notice'; text: string }
+  /** Nenhum provedor respondeu no meio da tarefa: passos já concluídos */
+  | { type: 'interrupted'; done: string[] };
+
+/** Tarefa interrompida: o pedido e o que já foi feito, para retomar sem refazer */
+interface Resume {
+  request: string;
+  done: string[];
+}
+
+/** Espera antes da retomada automática (o backend já deixou os provedores que falharam de castigo) */
+const RESUME_DELAY_MS = 4000;
+
+/** Pedido de retomada: o próximo provedor recebe o progresso e continua dali */
+function resumeText(r: Resume, extra?: string) {
+  const steps = r.done.map((l) => `- ${l}`).join('\n');
+  return (
+    `[Retomada] A tarefa anterior foi interrompida porque o provedor caiu. Pedido original:\n${r.request}\n\n` +
+    `Já concluído (NÃO repita estes passos; continue de onde parou):\n${steps}` +
+    (extra ? `\n\nNova mensagem do usuário: ${extra}` : '')
+  );
+}
+
+const CANCELLED_RE = /cancelad/i;
 
 const formatSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -95,6 +118,9 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
 
   // Bolha da resposta que está chegando aos poucos (o `text` do fim do passo a substitui)
   const draft = useRef<{ id: string; text: string } | null>(null);
+  // Progresso da tarefa em andamento (vem do backend se ninguém responder) e a retomada pendente
+  const progress = useRef<string[]>([]);
+  const pendingResume = useRef<Resume | null>(null);
 
   const onEvent = useCallback(
     (e: AgentEvent) => {
@@ -120,6 +146,9 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
           } else if (text) setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'assistant', text }]);
           break;
         }
+        case 'interrupted':
+          progress.current = e.done;
+          break;
         case 'notice':
           draft.current = null;
           setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'notice', text: e.text }]);
@@ -156,6 +185,18 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
     [update]
   );
 
+  /** Uma chamada ao modelo principal (backend) com o texto já pronto */
+  const callBrain = async (requestText: string) => {
+    const s = settingsRef.current;
+    progress.current = [];
+    const channel = new Channel<AgentEvent>();
+    channel.onmessage = (e) => onEvent(e);
+    await invoke('brain_send', {
+      req: { text: requestText, auto_approve: s.agentAuto, persona: getPalette().persona },
+      events: channel,
+    });
+  };
+
   const send = async (text: string, files?: DroppedFile[]) => {
     const s = settingsRef.current;
     const userItem: ChatItem = { id: crypto.randomUUID(), kind: 'user', text, files };
@@ -170,29 +211,51 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
       if (isTauri()) {
         // O modelo principal (backend) cuida de tudo: memória, escolha de provedor,
         // especialistas e falhas. Aqui só chega o que ele decidiu mostrar.
-        const channel = new Channel<AgentEvent>();
-        channel.onmessage = (e) => onEvent(e);
-        await invoke('brain_send', {
-          req: { text: withFiles(text, files), auto_approve: s.agentAuto, persona: getPalette().persona },
-          events: channel,
-        });
+        // Se a última tarefa caiu no meio, este pedido leva junto o que já foi feito.
+        const request = withFiles(text, files);
+        const resume = pendingResume.current;
+        pendingResume.current = null;
+        const full = resume ? resumeText(resume, request) : request;
+        try {
+          await callBrain(full);
+        } catch (err) {
+          const done = progress.current;
+          if (!done.length || CANCELLED_RE.test(String(err))) throw err;
+          // caiu no meio, com passos prontos: tenta uma vez de novo, em outro provedor, sem refazer
+          const r: Resume = { request: resume ? resume.request : request, done: [...(resume?.done ?? []), ...done] };
+          setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'notice', text: `O provedor caiu no meio da tarefa — retomando em outro (${r.done.length} passos já feitos).` }]);
+          await new Promise((ok) => setTimeout(ok, RESUME_DELAY_MS));
+          try {
+            await callBrain(resumeText(r));
+          } catch (err2) {
+            // guarda: a próxima mensagem continua de onde parou
+            pendingResume.current = { request: r.request, done: [...r.done, ...progress.current] };
+            throw err2;
+          }
+        }
       } else {
-        // Navegador (npm run dev): só conversa, sem terminal nem equipe
+        // Navegador (npm run dev): só conversa, sem terminal nem equipe — com failover entre provedores
         let raw = '';
         const id = crypto.randomUUID();
         let got = false;
-        await streamChat(s, s.provider, history, (chunk) => {
-          raw += chunk;
-          const shown = stripThinking(raw);
-          if (!shown) return;
-          if (!got) setItems((prev) => [...prev, { id, kind: 'assistant', text: shown }]);
-          else update(id, (m) => (m.kind === 'assistant' ? { ...m, text: shown } : m));
-          got = true;
-        });
+        await streamChatFailover(
+          s,
+          history,
+          (chunk) => {
+            raw += chunk;
+            const shown = stripThinking(raw);
+            if (!shown) return;
+            if (!got) setItems((prev) => [...prev, { id, kind: 'assistant', text: shown }]);
+            else update(id, (m) => (m.kind === 'assistant' ? { ...m, text: shown } : m));
+            got = true;
+          },
+          (from, to) => console.info(`[Lumo] ${from} falhou; seguindo com ${to}`)
+        );
       }
     } catch (err) {
       failed = true;
-      note(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      note(pendingResume.current ? `${msg} Quando quiser, mande qualquer mensagem que eu continuo de onde parei.` : msg);
     }
     setLoading(false);
     onDone(!failed);
@@ -217,6 +280,8 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
   const clear = useCallback(() => {
     void invoke('agent_cancel').catch(() => {});
     void invoke('brain_reset').catch(() => {});
+    pendingResume.current = null;
+    progress.current = [];
     setItems([WELCOME]);
   }, []);
 
