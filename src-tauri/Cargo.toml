@@ -1,6 +1,6 @@
 [package]
 name = "lumo-assistant"
-version = "1.8.0"
+version = "1.8.1"
 description = "Minimalist Top Notch Productivity Companion for Linux"
 authors = ["Lumo Contributor"]
 license = "MIT"
