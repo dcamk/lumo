@@ -333,12 +333,23 @@ pub async fn google_disconnect(app: AppHandle) -> Result<GoogleStatus, String> {
 /// Não lidos da caixa de entrada: contagem real + os 8 mais recentes
 #[tauri::command]
 pub async fn gmail_unread(app: AppHandle) -> Result<Inbox, String> {
+    let inbox = gmail_query(&app, "is:unread in:inbox", 8).await?;
     let label = get_json(&app, "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX").await?;
-    let list = get_json(
-        &app,
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is%3Aunread%20in%3Ainbox&maxResults=8",
-    )
-    .await?;
+    let total = label["messagesUnread"].as_u64().unwrap_or(inbox.messages.len() as u64);
+    Ok(Inbox { total, messages: inbox.messages })
+}
+
+/// Conta Google conectada? (sem rede)
+pub fn connected() -> bool {
+    let Some(app) = crate::brain::try_app() else { return false };
+    SESSION.lock().map(|g| g.is_some()).unwrap_or(false) || load_saved(&app).is_some()
+}
+
+/// Busca e-mails pela sintaxe do Gmail (usada pelo agente e pela contagem de não lidos)
+pub async fn gmail_query(app: &AppHandle, query: &str, max: usize) -> Result<Inbox, String> {
+    let app = app.clone();
+    let q: String = reqwest::Url::parse_with_params("http://x/", &[("q", query)]).map(|u| u.query().unwrap_or("").trim_start_matches("q=").to_string()).unwrap_or_default();
+    let list = get_json(&app, &format!("https://gmail.googleapis.com/gmail/v1/users/me/messages?q={}&maxResults={}", q, max)).await?;
     let ids: Vec<String> = list["messages"]
         .as_array()
         .map(|a| a.iter().filter_map(|m| m["id"].as_str().map(str::to_string)).collect())
@@ -381,7 +392,7 @@ pub async fn gmail_unread(app: AppHandle) -> Result<Inbox, String> {
         });
     }
     messages.sort_by(|a, b| b.date.cmp(&a.date));
-    let total = label["messagesUnread"].as_u64().unwrap_or(messages.len() as u64);
+    let total = messages.len() as u64;
     Ok(Inbox { total, messages })
 }
 

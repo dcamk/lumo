@@ -165,6 +165,9 @@ pub fn set_window_shape(app: AppHandle, x: f64, y: f64, width: f64, height: f64,
                 let region = rounded_bottom(x, y, width, height, radius);
                 gtk_win.shape_combine_region(Some(&region));
                 gtk_win.input_shape_combine_region(Some(&region));
+                // Repinta a janela inteira: sem isso o que ficou fora da casca pode
+                // continuar na tela até o próximo redesenho completo
+                gtk_win.queue_draw();
             })
             .map_err(|e| e.to_string())?;
     }

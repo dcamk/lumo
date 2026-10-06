@@ -1,10 +1,8 @@
 import { Channel } from '@tauri-apps/api/core';
 import { useCallback, useRef, useState } from 'react';
-import { isRetryable, streamChat, type Turn } from '../api/aiService';
+import { streamChat, type Turn } from '../api/aiService';
 import { sound } from '../audio/SoundEngine';
-import { agentTarget, presetOf } from '../lib/providers';
-import { buildChain, markFailed, markOk } from '../lib/router';
-import { invoke, isTauri, tryInvoke } from '../lib/tauri';
+import { invoke, isTauri } from '../lib/tauri';
 import { getPalette } from '../theme/store';
 import type { ChatItem, DroppedFile, Settings } from '../types';
 
@@ -54,6 +52,7 @@ const WELCOME: ChatItem = {
 /** Eventos do agente (src-tauri/src/agent.rs) */
 type AgentEvent =
   | { type: 'text'; text: string }
+  | { type: 'text_delta'; text: string }
   | { type: 'command'; id: string; command: string; reason: string; needs_approval: boolean }
   | { type: 'output'; id: string; line: string }
   | { type: 'command_done'; id: string; code: number | null; approved: boolean }
@@ -72,10 +71,10 @@ function withFiles(text: string, files?: DroppedFile[]) {
 }
 
 /**
- * Conversa com a IA. No app, a IA é um agente com acesso ao terminal: os comandos que
- * ela quer rodar aparecem no chat para aprovação (src-tauri/src/agent.rs).
- * Se o provedor falhar antes de responder (limite das camadas grátis, fora do ar),
- * tenta o próximo gratuito configurado — a bolha mostra quem respondeu.
+ * Conversa com a IA. No app, quem responde é o "cérebro" (src-tauri/src/brain): o modelo
+ * principal (o provedor escolhido em Config → IA) com acesso ao terminal, memória e
+ * especialistas. Os comandos que ele quer rodar aparecem no chat para aprovação.
+ * Se o provedor falhar, o cérebro troca sozinho para outro gratuito configurado.
  */
 export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
   const [items, setItems] = useState<ChatItem[]>([WELCOME]);
@@ -94,12 +93,35 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
     []
   );
 
+  // Resposta chegando aos poucos: um balão "rascunho" que o texto final substitui
+  const draft = useRef<{ id: string; text: string } | null>(null);
   const onEvent = useCallback(
-    (e: AgentEvent, via: string | undefined) => {
+    (e: AgentEvent) => {
       switch (e.type) {
+        case 'text_delta': {
+          if (!draft.current) {
+            const id = crypto.randomUUID();
+            draft.current = { id, text: e.text };
+            setItems((prev) => [...prev, { id, kind: 'assistant', text: e.text }]);
+          } else {
+            const d = draft.current;
+            d.text += e.text;
+            const text = d.text;
+            update(d.id, (m) => (m.kind === 'assistant' ? { ...m, text } : m));
+          }
+          break;
+        }
         case 'text': {
+          // Texto final do passo (substitui o rascunho); vazio = a tentativa falhou, apaga o rascunho
           const text = stripThinking(e.text);
-          if (text) setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'assistant', text, via }]);
+          const d = draft.current;
+          draft.current = null;
+          if (d) {
+            if (text) update(d.id, (m) => (m.kind === 'assistant' ? { ...m, text } : m));
+            else setItems((prev) => prev.filter((m) => m.id !== d.id));
+          } else if (text) {
+            setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'assistant', text }]);
+          }
           break;
         }
         case 'notice':
@@ -137,72 +159,54 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
     [update]
   );
 
+  const sending = useRef(false);
   const send = async (text: string, files?: DroppedFile[]) => {
+    // Uma tarefa por vez: o agente tem um único "Parar" e uma fila de aprovações
+    if (sending.current || !text.trim()) return;
+    sending.current = true;
     const s = settingsRef.current;
     const userItem: ChatItem = { id: crypto.randomUUID(), kind: 'user', text, files };
     const history = toTurns([...itemsRef.current, userItem]);
     setItems((prev) => [...prev, userItem]);
     setLoading(true);
     sound.playPurr();
+    draft.current = null;
 
-    const chain = await buildChain(s);
-    void tryInvoke('frontend_log', { message: `IA: fila ${chain.map((c) => c.label).join(' → ')}` });
-    let lastError: unknown = null;
-    for (const [i, cand] of chain.entries()) {
-      const provider = cand.provider;
-      const via = i > 0 ? cand.label : undefined;
-      if (i > 0) {
-        setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: 'notice', text: `${chain[i - 1].label} não respondeu — tentando ${cand.label}` }]);
+    let error: unknown = null;
+    try {
+      if (isTauri()) {
+        // O cérebro guarda a conversa (sobrevive a reinícios); só vai a fala nova
+        const channel = new Channel<AgentEvent>();
+        channel.onmessage = onEvent;
+        await invoke('brain_send', {
+          req: { text: withFiles(text, files), auto_approve: s.agentAuto, persona: getPalette().persona },
+          events: channel,
+        });
+      } else {
+        // Navegador (npm run dev): só conversa, sem terminal
+        let raw = '';
+        const id = crypto.randomUUID();
+        let got = false;
+        await streamChat(s, s.provider, history, (chunk) => {
+          raw += chunk;
+          const shown = stripThinking(raw);
+          if (!shown) return;
+          if (!got) setItems((prev) => [...prev, { id, kind: 'assistant', text: shown }]);
+          else update(id, (m) => (m.kind === 'assistant' ? { ...m, text: shown } : m));
+          got = true;
+        });
       }
-      let got = false;
-      try {
-        if (isTauri()) {
-          const channel = new Channel<AgentEvent>();
-          channel.onmessage = (e) => {
-            got = true;
-            onEvent(e, via);
-          };
-          await invoke('agent_run', {
-            req: {
-              ...agentTarget(s, provider, cand.model),
-              history: history.map((t) => ({ role: t.role, content: t.text })),
-              auto_approve: s.agentAuto,
-              timeout_secs: cand.timeout,
-              persona: getPalette().persona,
-            },
-            events: channel,
-          });
-        } else {
-          // Navegador (npm run dev): só conversa, sem terminal
-          let raw = '';
-          const id = crypto.randomUUID();
-          await streamChat(s, provider, history, (chunk) => {
-            raw += chunk;
-            const shown = stripThinking(raw);
-            if (!shown) return;
-            if (!got) setItems((prev) => [...prev, { id, kind: 'assistant', text: shown, via }]);
-            else update(id, (m) => (m.kind === 'assistant' ? { ...m, text: shown } : m));
-            got = true;
-          });
-        }
-        lastError = null;
-        markOk(cand);
-        break;
-      } catch (err) {
-        lastError = err;
-        markFailed(cand, err);
-        // Já começou a responder, ou o erro não é de limite/conexão: não adianta trocar
-        if (got || !isRetryable(err)) break;
-      }
+    } catch (err) {
+      error = err;
     }
-
-    if (lastError) {
-      const detail = lastError instanceof Error ? lastError.message : String(lastError);
-      const tip = chain.length === 1 && isRetryable(lastError) ? '\nConfigure um provedor gratuito em Config → IA.' : '';
-      note(`Nenhum provedor respondeu agora. ${detail}${tip}`);
-    }
+    // Rascunho que ficou vazio (a tentativa falhou no meio): some da conversa
+    const d = draft.current as { id: string; text: string } | null;
+    draft.current = null;
+    if (d && !d.text.trim()) setItems((prev) => prev.filter((m) => m.id !== d.id));
+    if (error) note(error instanceof Error ? error.message : String(error));
+    sending.current = false;
     setLoading(false);
-    onDone(!lastError);
+    onDone(!error);
   };
 
   /** Resposta do usuário a um comando/gravação pendente */
@@ -223,6 +227,8 @@ export function useChat(settings: Settings, onDone: (ok: boolean) => void) {
   /** Nova conversa: para o que estiver rodando e limpa o contexto */
   const clear = useCallback(() => {
     void invoke('agent_cancel').catch(() => {});
+    void invoke('brain_reset').catch(() => {});
+    draft.current = null;
     setItems([WELCOME]);
   }, []);
 

@@ -46,7 +46,11 @@ export function useWindowMode(scale: number, extra: PanelExtra, wide: boolean, r
     void tryInvoke('set_window_shape', shape);
   }, []);
 
-  // Acompanha a casca enquanto ela anima (rAF até o prazo)
+  // Acompanha a casca enquanto ela anima (rAF até o prazo). A cada quadro a janela
+  // inteira é repintada: o WebKitGTK só redesenha o que mudou e, quando a casca encolhe,
+  // a área que voltou a ser transparente fica com o desenho antigo (os "rastros" em
+  // degraus). O recorte da janela (set_window_shape) esconde isso só quando o
+  // compositor o respeita; a repintura resolve em qualquer caso.
   const trackUntil = useRef(0);
   const tracking = useRef(false);
   const track = useCallback(
@@ -54,10 +58,20 @@ export function useWindowMode(scale: number, extra: PanelExtra, wide: boolean, r
       trackUntil.current = Math.max(trackUntil.current, performance.now() + ms);
       if (tracking.current) return;
       tracking.current = true;
+      let flip = false;
       const loop = () => {
         syncShape();
+        flip = !flip;
+        flushRepaint(flip);
         if (performance.now() < trackUntil.current) requestAnimationFrame(loop);
-        else tracking.current = false;
+        else {
+          tracking.current = false;
+          // mais dois quadros depois do fim: limpa o que sobrou do último passo
+          requestAnimationFrame(() => {
+            flushRepaint(true);
+            requestAnimationFrame(() => flushRepaint(false));
+          });
+        }
       };
       requestAnimationFrame(loop);
     },
@@ -112,6 +126,22 @@ export function useWindowMode(scale: number, extra: PanelExtra, wide: boolean, r
   }, []);
 
   return { mode, modeRef, shellRef, contentRef, changeMode, size };
+}
+
+/**
+ * Camada invisível do tamanho da janela: alternar a cor dela (quase transparente ↔
+ * transparente) obriga o WebKit a redesenhar a janela toda, apagando os rastros.
+ */
+let flushEl: HTMLDivElement | null = null;
+function flushRepaint(on: boolean) {
+  if (typeof document === 'undefined') return;
+  if (!flushEl) {
+    flushEl = document.createElement('div');
+    flushEl.setAttribute('aria-hidden', 'true');
+    flushEl.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;background:transparent;';
+    document.body.appendChild(flushEl);
+  }
+  flushEl.style.background = on ? 'rgba(0,0,0,0.004)' : 'transparent';
 }
 
 /** Tamanho máximo do painel ao puxar o canto (para limitar o arraste) */
