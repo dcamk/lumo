@@ -23,3 +23,4 @@ instalador/
 # ferramentas locais
 .claude/
 apresentacao-video/
+src-tauri/google-client.json

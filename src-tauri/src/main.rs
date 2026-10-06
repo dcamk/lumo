@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent;
+mod brain;
 mod api;
 mod audio;
 mod cursor;
@@ -95,7 +96,23 @@ fn main() {
             window::get_screen_bounds,
             audio::play_sound,
             audio::audio_backend,
-            agent::agent_run,
+            brain::orchestrator::brain_send,
+            brain::orchestrator::brain_ask,
+            brain::brain_configure,
+            brain::brain_reset,
+            brain::brain_warm,
+            brain::pool_status,
+            brain::pool_test,
+            brain::memory_list,
+            brain::memory_add,
+            brain::memory_forget,
+            brain::skill_list,
+            brain::skill_install,
+            brain::skill_remove,
+            brain::plugin_list,
+            brain::plugin_add,
+            brain::plugin_remove,
+            brain::plugin_set,
             agent::agent_approve,
             agent::agent_cancel,
             agent::inspect_paths,
@@ -133,6 +150,7 @@ fn main() {
             system::frontend_log
         ])
         .setup(|app| {
+            brain::init(app.handle());
             system::build_tray(app.handle()).ok();
             system::refresh_autostart();
             // GNOME: atalho do próprio sistema (funciona com qualquer app em foco).

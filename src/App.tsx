@@ -13,6 +13,7 @@ import { MailTab } from './components/tabs/MailTab';
 import { SettingsPageSwitch, SettingsTab, type SettingsPage } from './components/tabs/SettingsTab';
 import { TasksTab } from './components/tabs/TasksTab';
 import { useAudioUnlock } from './hooks/useAudioUnlock';
+import { useBrainConfig } from './hooks/useBrain';
 import { useChat } from './hooks/useChat';
 import { useEmotion } from './hooks/useEmotion';
 import { useFileDrop } from './hooks/useFileDrop';
@@ -108,6 +109,7 @@ export default function App() {
   });
 
   // ---- chat --------------------------------------------------------------------------------
+  useBrainConfig(settings);
   const chat = useChat(settings, (ok) => {
     if (ok) {
       sound.playChirp();

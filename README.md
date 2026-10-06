@@ -28,7 +28,7 @@ reage ao que você faz. Dele você acessa, sem trocar de janela:
 
 - **Tarefas e lembretes** com aviso na hora certa;
 - **Foco**: Pomodoro e modo Não Perturbe;
-- **IA** com provedores **gratuitos** (funciona sem chave com o LLM7) e agente que pode usar o terminal, sempre com a sua aprovação;
+- **IA** com provedores **gratuitos** (o Groq é grátis e sem cartão; sem chave nenhuma o LLM7 quebra o galho) e agente que pode usar o terminal, sempre com a sua aprovação;
 - **Gmail**: aviso de e-mails não lidos (conexão opcional, com o seu próprio cliente OAuth);
 - **Sistema**: uso de CPU/RAM/disco, player de mídia e ações rápidas;
 - **Terminal** integrado, com as cores da paleta ativa;
@@ -80,7 +80,7 @@ WebKitGTK 4.1 / GTK3 / librsvg / OpenSSL / libayatana-appindicator da sua distri
 
 ### Primeira configuração (outro computador)
 
-Nada é preciso para começar: o provedor padrão (**LLM7**) funciona sem chave. Depois, em **Config**:
+Para a IA responder bem, crie uma chave grátis do **Groq** (1 minuto, sem cartão: Config → IA → Obter chave). Sem chave o Lumo ainda responde pelo LLM7, mas bem pior. Depois, em **Config**:
 
 1. **IA** → escolha um provedor gratuito da lista (cada um tem o link para criar a chave). A chave fica só
    neste PC, na pasta de configuração do app — nunca no repositório.
@@ -288,9 +288,10 @@ formato da OpenAI (`src/lib/providers.ts`):
 
 | Provedor | Chave | Observação |
 |---|---|---|
-| **LLM7** | não precisa | padrão: funciona sem configurar nada (modelos `fast`/`default`) |
-| Groq | grátis, sem cartão | o mais rápido |
-| Gemini | grátis (AI Studio) | |
+| **Groq** | grátis, sem cartão | padrão e recomendado: `openai/gpt-oss-120b`, rápido, ~1.000 pedidos/dia |
+| Gemini | grátis (AI Studio), sem cartão | `gemini-flash-latest`; ótimo com documentos grandes |
+| GitHub Models | grátis com a conta do GitHub | token com permissão “Models”; poucos pedidos/dia, modelos fortes (`openai/gpt-4.1-mini`) |
+| LLM7 | não precisa | último recurso: responde mal e vive lotado |
 | OpenRouter | grátis | “Listar” mostra só os modelos `:free` |
 | Cerebras, Mistral, NVIDIA NIM, Hugging Face | grátis | |
 | OpenAI, Claude | pagos | |
@@ -298,7 +299,8 @@ formato da OpenAI (`src/lib/providers.ts`):
 | Ollama | — | modelos locais |
 
 - **Obter chave** abre a página do provedor; **Listar** busca os modelos disponíveis agora (os gratuitos
-  mudam com frequência — se um modelo sumir, liste e escolha outro).
+  mudam com frequência). Se o modelo padrão de um provedor sair do ar, o Lumo troca sozinho por outro da
+  mesma conta; Config → IA → **Status** mostra quem está respondendo.
 - **Plano B**: se o provedor der limite/erro antes de responder, o Lumo tenta outro gratuito que tenha chave
   (a bolha mostra “respondido via …”).
 - Blocos `<think>…</think>` de modelos de raciocínio não aparecem na resposta.
@@ -307,8 +309,9 @@ formato da OpenAI (`src/lib/providers.ts`):
 
 O chat escolhe o provedor pela disponibilidade, a cada mensagem:
 
-1. o configurado em Config → IA;
-2. os outros gratuitos que têm chave; o LLM7 (sem chave);
+1. o configurado em Config → IA (sempre ele, enquanto responder);
+2. os outros gratuitos que têm chave; por último o LLM7 (sem chave). Provedores **pagos** (OpenAI, Claude)
+   só são usados quando são o escolhido — o Lumo nunca gasta créditos por conta própria;
 3. os modelos do **Ollama** instalados que aceitam ferramentas — o configurado e, se ele demorar, os
    **menores** (respondem mais rápido).
 

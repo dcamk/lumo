@@ -2,6 +2,7 @@ import { ExternalLink, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { listModels } from '../../api/aiService';
 import { sound, type AudioDiagnostics } from '../../audio/SoundEngine';
+import type { PoolInfo } from '../../hooks/useBrain';
 import type { GoogleControls } from '../../hooks/useGoogle';
 import { SCALE_MAX, SCALE_MIN } from '../../lib/layout';
 import { shake } from '../../lib/motion';
@@ -362,12 +363,66 @@ function AIPage({ settings: s, onChange, onOpen }: Pick<Props, 'settings' | 'onC
         </p>
       )}
 
+      <PoolStatus />
+
       <div data-anim="item" className={rowCls}>
         <span className={labelCls}>Comandos</span>
         <Toggle label="Executar comandos sem perguntar" on={s.agentAuto} onToggle={() => onChange({ agentAuto: !s.agentAuto })} />
         <span className="text-slate-300">{s.agentAuto ? 'executa sem perguntar (sudo sempre pergunta)' : 'pergunta antes de executar'}</span>
       </div>
     </>
+  );
+}
+
+/** Quem está respondendo agora (testado em segundo plano pelo cérebro) */
+function PoolStatus() {
+  const [pool, setPool] = useState<PoolInfo[] | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const load = () => void tryInvoke<PoolInfo[]>('pool_status').then((p) => p && setPool(p));
+    load();
+    const id = window.setInterval(load, 5000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const test = async () => {
+    setTesting(true);
+    const p = await tryInvoke<PoolInfo[]>('pool_test');
+    if (p) setPool(p);
+    setTesting(false);
+  };
+
+  if (!pool) return null;
+  const good = pool.some((p) => !p.local && p.provider !== 'llm7');
+  return (
+    <div data-anim="item" className="space-y-1">
+      <div className={rowCls}>
+        <span className={labelCls}>Status</span>
+        <span className="flex-1 text-slate-400 truncate">
+          {good ? 'O escolhido responde; se ele falhar, o Lumo usa os outros grátis.' : 'Sem chave: as respostas saem fracas. Pegue uma chave grátis do Groq.'}
+        </span>
+        <button type="button" disabled={testing} onClick={test} className={smallBtn}>
+          {testing ? '…' : 'Testar agora'}
+        </button>
+      </div>
+      {pool.map((p) => {
+        const state = p.ok === false ? 'falhou' : p.cooldown_secs > 0 ? `pausa ${Math.ceil(p.cooldown_secs / 60)} min` : p.ok ? 'ok' : 'testando…';
+        const cls = p.ok === false ? 'text-amber-400' : p.cooldown_secs > 0 ? 'text-slate-500' : p.ok ? 'text-emerald-400' : 'text-slate-500';
+        return (
+          <p key={p.key} className={`${hintCls} pl-[84px] flex gap-2`} title={p.error || p.rate}>
+            <span className="truncate flex-1">
+              {p.label} <span className="font-mono text-slate-500">{p.model}</span>
+            </span>
+            <span className={cls}>
+              {state}
+              {p.latency_ms && p.ok ? ` · ${(p.latency_ms / 1000).toFixed(1)} s` : ''}
+            </span>
+          </p>
+        );
+      })}
+    </div>
   );
 }
 

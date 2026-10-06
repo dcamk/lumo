@@ -31,20 +31,31 @@ export const PROVIDERS: ProviderPreset[] = [
     kind: 'openai',
     group: 'free',
     baseUrl: 'https://api.groq.com/openai/v1',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_…',
-    hint: 'Grátis, sem cartão. O mais rápido.',
+    hint: 'Recomendado. Grátis, sem cartão, ~1.000 pedidos/dia e muito rápido.',
   },
   {
     id: 'gemini',
     label: 'Gemini',
     kind: 'gemini',
     group: 'free',
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-flash-latest',
     keyUrl: 'https://aistudio.google.com/app/apikey',
     keyPlaceholder: 'AIza…',
-    hint: 'Camada grátis do Google AI Studio.',
+    hint: 'Grátis, sem cartão. Ótimo com documentos grandes.',
+  },
+  {
+    id: 'github',
+    label: 'GitHub Models',
+    kind: 'openai',
+    group: 'free',
+    baseUrl: 'https://models.github.ai/inference',
+    defaultModel: 'openai/gpt-4.1-mini',
+    keyUrl: 'https://github.com/settings/personal-access-tokens/new',
+    keyPlaceholder: 'github_pat_…',
+    hint: 'Grátis com a sua conta do GitHub (token com permissão “Models”). Poucos pedidos/dia, mas modelos fortes.',
   },
   {
     id: 'openrouter',
@@ -52,7 +63,7 @@ export const PROVIDERS: ProviderPreset[] = [
     kind: 'openai',
     group: 'free',
     baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
+    defaultModel: 'openai/gpt-oss-120b:free',
     keyUrl: 'https://openrouter.ai/settings/keys',
     keyPlaceholder: 'sk-or-v1-…',
     modelFilter: (id) => id.endsWith(':free'),
@@ -64,10 +75,10 @@ export const PROVIDERS: ProviderPreset[] = [
     kind: 'openai',
     group: 'free',
     baseUrl: 'https://api.cerebras.ai/v1',
-    defaultModel: 'llama3.1-8b',
+    defaultModel: 'gpt-oss-120b',
     keyUrl: 'https://cloud.cerebras.ai/',
     keyPlaceholder: 'csk-…',
-    hint: 'Grátis, sem cartão. Muito rápido.',
+    hint: 'Muito rápido. Confira as condições da camada grátis.',
   },
   {
     id: 'mistral',
@@ -96,7 +107,7 @@ export const PROVIDERS: ProviderPreset[] = [
     kind: 'openai',
     group: 'free',
     baseUrl: 'https://router.huggingface.co/v1',
-    defaultModel: 'meta-llama/Llama-3.1-8B-Instruct',
+    defaultModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://huggingface.co/settings/tokens',
     keyPlaceholder: 'hf_…',
     hint: 'Créditos mensais grátis.',
@@ -107,10 +118,10 @@ export const PROVIDERS: ProviderPreset[] = [
     kind: 'openai',
     group: 'free',
     baseUrl: 'https://api.llm7.io/v1',
-    defaultModel: 'fast',
+    defaultModel: 'default',
     keyUrl: 'https://token.llm7.io',
     keyless: true,
-    hint: 'Funciona sem chave (modelos “fast” e “default”); a chave grátis libera os outros.',
+    hint: 'Funciona sem chave, mas responde mal e vive lotado. Use só para testar.',
   },
   {
     id: 'openai',
@@ -181,34 +192,4 @@ export function providerReady(settings: Settings, id: ProviderId) {
   const cfg = providerConfig(settings, id);
   if (preset.editableBase && !cfg.endpoint) return false;
   return preset.keyless || cfg.apiKey.trim().length > 0;
-}
-
-/**
- * Ordem de tentativas: o escolhido primeiro; com "tentar outro provedor" ligado,
- * depois os gratuitos prontos para uso (o Ollama local fica de fora: pode não estar rodando).
- */
-export function fallbackChain(settings: Settings): ProviderId[] {
-  const chain: ProviderId[] = [settings.provider];
-  if (!settings.aiFallback) return chain;
-  for (const p of PROVIDERS) {
-    if (p.group === 'free' && p.id !== settings.provider && providerReady(settings, p.id)) chain.push(p.id);
-  }
-  return chain.slice(0, 4);
-}
-
-/**
- * Como o agente (IA com terminal) conversa com cada provedor:
- * 'openai' = ferramentas nativas · 'claude' = tool_use · 'text' = bloco <run> (sem ferramentas).
- * Gemini e Ollama também têm endpoint compatível com OpenAI, com ferramentas.
- */
-export function agentTarget(settings: Settings, id: ProviderId, model?: string) {
-  const preset = presetOf(id);
-  const cfg = { ...providerConfig(settings, id), ...(model ? { model } : {}) };
-  let format: 'openai' | 'claude' | 'text' = 'openai';
-  let endpoint = cfg.endpoint;
-  if (preset.kind === 'claude') format = 'claude';
-  else if (id === 'llm7') format = 'text'; // sem chave o LLM7 não usa ferramentas
-  else if (preset.kind === 'gemini') endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai';
-  else if (preset.kind === 'ollama') endpoint = `${cfg.endpoint.replace(/\/+$/, '')}/v1`;
-  return { format, label: preset.label, endpoint, api_key: cfg.apiKey, model: cfg.model };
 }

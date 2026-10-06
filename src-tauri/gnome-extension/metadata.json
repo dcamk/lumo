@@ -1,0 +1,7 @@
+{
+  "uuid": "lumo-cursor@lumo.app",
+  "name": "Lumo — posição do cursor",
+  "description": "Informa ao Lumo onde está o mouse para os olhos dele seguirem o cursor na tela toda (Wayland). Expõe só a posição (x, y) no barramento D-Bus da sessão; nada de cliques ou teclas.",
+  "shell-version": ["42", "43", "44"],
+  "version": 1
+}

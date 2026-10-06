@@ -49,6 +49,7 @@ export type CursorMode = 'lumo' | 'screen';
 export type ProviderId =
   | 'groq'
   | 'gemini'
+  | 'github'
   | 'openrouter'
   | 'cerebras'
   | 'mistral'
@@ -114,7 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lumoScale: 1,
   cursorMode: 'screen',
   alwaysOnTop: true,
-  provider: 'llm7', // funciona sem chave; troque em Config → IA
+  provider: 'groq', // chave grátis em console.groq.com; sem chave o LLM7 responde (fraco)
   providers: {},
   aiFallback: true,
   mailNotify: true,
