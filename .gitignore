@@ -4,22 +4,9 @@ dist/
 coverage/
 .DS_Store
 *.log
-
-# segredos e configuração local — nunca versionar
-.env
-.env.*
+.env*
 !.env.example
-*.pem
-*.key
-secrets.json
-
-# artefatos de compilação e pacotes
 src-tauri/target/
 src-tauri/gen/
 instalador/
-*.deb
-*.AppImage
-
-# ferramentas locais
-.claude/
-apresentacao-video/
+src-tauri/google-client.json

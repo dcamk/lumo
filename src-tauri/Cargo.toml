@@ -1,8 +1,8 @@
 [package]
 name = "lumo-assistant"
-version = "1.7.0"
+version = "1.8.0"
 description = "Minimalist Top Notch Productivity Companion for Linux"
-authors = ["Dalmácio"]
+authors = ["Lumo Contributor"]
 license = "MIT"
 edition = "2021"
 build = "build.rs"

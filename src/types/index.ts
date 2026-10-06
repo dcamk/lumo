@@ -28,7 +28,7 @@ export interface DroppedFile {
 /** Itens da conversa: falas, comandos que a IA quer rodar, arquivos que quer gravar */
 export type ChatItem =
   | { id: string; kind: 'user'; text: string; files?: DroppedFile[] }
-  | { id: string; kind: 'assistant'; text: string; via?: string }
+  | { id: string; kind: 'assistant'; text: string }
   | {
       id: string;
       kind: 'command';
@@ -84,8 +84,6 @@ export interface Settings {
   alwaysOnTop: boolean;
   provider: ProviderId;
   providers: Partial<Record<ProviderId, ProviderConfig>>;
-  /** Se o provedor falhar (limite, fora do ar), tenta outro gratuito configurado */
-  aiFallback: boolean;
   /** Notificação do sistema para e-mail novo (além do aviso na pílula) */
   mailNotify: boolean;
   /** Intervalo da checagem do Gmail, em minutos */
@@ -116,7 +114,6 @@ export const DEFAULT_SETTINGS: Settings = {
   alwaysOnTop: true,
   provider: 'llm7', // funciona sem chave; troque em Config → IA
   providers: {},
-  aiFallback: true,
   mailNotify: true,
   mailInterval: 2,
   systemAlerts: true,

@@ -7,13 +7,16 @@ import { SCALE_MAX, SCALE_MIN } from '../../lib/layout';
 import { shake } from '../../lib/motion';
 import { GROUP_LABEL, PROVIDERS, presetOf, providerConfig } from '../../lib/providers';
 import { invoke, isTauri, tryInvoke } from '../../lib/tauri';
+import type { PoolSlot } from '../../hooks/useBrain';
+import { AgentPage } from './AgentPage';
 import type { CursorMode, ProviderConfig, ProviderId, Settings } from '../../types';
 
-export type SettingsPage = 'geral' | 'ia' | 'contas' | 'sistema';
+export type SettingsPage = 'geral' | 'ia' | 'agente' | 'contas' | 'sistema';
 
 const PAGES: { key: SettingsPage; label: string }[] = [
   { key: 'geral', label: 'Geral' },
   { key: 'ia', label: 'IA' },
+  { key: 'agente', label: 'Agente' },
   { key: 'contas', label: 'Contas' },
   { key: 'sistema', label: 'Sistema' },
 ];
@@ -76,14 +79,16 @@ interface Props {
   onChange: (patch: Partial<Settings>) => void;
   google: GoogleControls;
   onOpen: (url: string) => void;
+  brain: { pool: PoolSlot[]; testing: boolean; test: () => void };
 }
 
 /** Aba Config do painel */
-export function SettingsTab({ page, settings, onChange, google, onOpen }: Props) {
+export function SettingsTab({ page, settings, onChange, google, onOpen, brain }: Props) {
   return (
     <div key={page} className="flex-1 min-h-0 flex flex-col gap-1.5 pt-2 overflow-y-auto custom-scrollbar pr-1 text-[11px]">
       {page === 'geral' && <GeneralPage settings={settings} onChange={onChange} />}
-      {page === 'ia' && <AIPage settings={settings} onChange={onChange} onOpen={onOpen} />}
+      {page === 'ia' && <AIPage settings={settings} onChange={onChange} onOpen={onOpen} brain={brain} />}
+      {page === 'agente' && <AgentPage />}
       {page === 'contas' && <AccountsPage settings={settings} onChange={onChange} google={google} onOpen={onOpen} />}
       {page === 'sistema' && <SystemPage settings={settings} onChange={onChange} />}
     </div>
@@ -249,7 +254,7 @@ function GeneralPage({ settings: s, onChange }: Pick<Props, 'settings' | 'onChan
 
 // ---- IA -------------------------------------------------------------------------------------
 
-function AIPage({ settings: s, onChange, onOpen }: Pick<Props, 'settings' | 'onChange' | 'onOpen'>) {
+function AIPage({ settings: s, onChange, onOpen, brain }: Pick<Props, 'settings' | 'onChange' | 'onOpen' | 'brain'>) {
   const active = s.provider;
   const preset = presetOf(active);
   const cfg = providerConfig(s, active);
@@ -283,10 +288,10 @@ function AIPage({ settings: s, onChange, onOpen }: Pick<Props, 'settings' | 'onC
   return (
     <>
       <div data-anim="item" className={rowCls}>
-        <span className={labelCls}>Provedor</span>
+        <span className={labelCls}>Editar</span>
         <select
           aria-label="Provedor de IA"
-          title={`${preset.hint} Se ele não responder, o Lumo usa outro disponível.`}
+          title={`${preset.hint} Escolha para editar a chave. O Lumo usa todos os provedores configurados.`}
           value={active}
           onChange={(e) => onChange({ provider: e.target.value as ProviderId })}
           className={`${inputCls} lumo-select flex-1`}
@@ -362,12 +367,54 @@ function AIPage({ settings: s, onChange, onOpen }: Pick<Props, 'settings' | 'onC
         </p>
       )}
 
+      <PoolList brain={brain} preferred={s.provider} onPrefer={(p) => onChange({ provider: p as ProviderId })} />
+
       <div data-anim="item" className={rowCls}>
         <span className={labelCls}>Comandos</span>
         <Toggle label="Executar comandos sem perguntar" on={s.agentAuto} onToggle={() => onChange({ agentAuto: !s.agentAuto })} />
         <span className="text-slate-300">{s.agentAuto ? 'executa sem perguntar (sudo sempre pergunta)' : 'pergunta antes de executar'}</span>
       </div>
     </>
+  );
+}
+
+const fmtLatency = (ms: number | null) => (ms == null ? '' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+
+/** Equipe de modelos: o que o backend já testou, com latência e limites */
+function PoolList({ brain, preferred, onPrefer }: { brain: Props['brain']; preferred: string; onPrefer: (id: string) => void }) {
+  if (!isTauri()) return null;
+  return (
+    <div data-anim="item" className="mt-1 p-2 rounded-xl bg-surface-2 border border-white/5 space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Equipe de modelos</span>
+        <button type="button" disabled={brain.testing} onClick={brain.test} className={`${smallBtn} ml-auto`}>
+          {brain.testing ? 'Testando…' : 'Testar agora'}
+        </button>
+      </div>
+      {brain.pool.length === 0 && <p className={hintCls}>Procurando modelos disponíveis…</p>}
+      {brain.pool.map((m) => {
+        const cooling = m.cooldown_secs > 0;
+        const dot = m.ok === false ? 'bg-red-400' : cooling ? 'bg-amber-400' : m.ok ? 'bg-emerald-400' : 'bg-slate-500 animate-pulse';
+        const detail = m.ok === false ? 'chave recusada' : cooling ? `em pausa ${Math.ceil(m.cooldown_secs / 60)} min` : m.ok ? [fmtLatency(m.latency_ms), m.tools === false ? 'sem ferramentas' : '', m.rate].filter(Boolean).join(' · ') : 'testando…';
+        return (
+          <div key={m.key} className="flex items-center gap-1.5 text-[10.5px]" title={m.error || `${m.model} · contexto ${m.ctx_k}k`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+            <span className="text-slate-200 truncate">{m.label}</span>
+            <span className="text-slate-500 truncate flex-1">{detail}</span>
+            {m.provider === preferred ? (
+              <span className="text-[9px] text-slate-400">preferido</span>
+            ) : (
+              <button type="button" onClick={() => onPrefer(m.provider)} className="text-[9px] text-slate-500 hover:text-white">
+                preferir
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <p className={hintCls}>
+        O Lumo testa todos em segundo plano, escolhe o modelo principal e entrega tarefas a especialistas conforme o limite e a velocidade de cada um. Mais chaves gratuitas = mais fôlego.
+      </p>
+    </div>
   );
 }
 
@@ -386,7 +433,20 @@ function AccountsPage({ settings: s, onChange, google, onOpen }: Pick<Props, 'se
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!(await google.configure(clientId, secret))) {
+    // Aceita o JSON baixado do Google Cloud colado inteiro no campo do Client ID
+    let id = clientId.trim();
+    let sec = secret;
+    if (id.startsWith('{')) {
+      try {
+        const o = JSON.parse(id);
+        const c = o.installed ?? o.web ?? o;
+        id = String(c.client_id ?? '');
+        sec = String(c.client_secret ?? sec);
+      } catch {
+        /* segue com o texto como está; o backend reclama do formato */
+      }
+    }
+    if (!(await google.configure(id, sec))) {
       shake(formRef.current);
       return;
     }
@@ -401,12 +461,12 @@ function AccountsPage({ settings: s, onChange, google, onOpen }: Pick<Props, 'se
       <div data-anim="item" className={rowCls}>
         <span className={labelCls}>Google</span>
         <span className={`min-w-0 truncate ${g?.connected ? 'text-slate-200' : 'text-slate-500'}`}>
-          {g?.connected ? g.email : g?.configured ? 'não conectado' : 'não configurado'}
+          {g?.connected ? g.email : g?.configured ? 'entre com a sua conta' : 'login ainda não habilitado'}
         </span>
         <span className="ml-auto flex gap-1">
           {g?.configured && !g.connected && (
             <button type="button" disabled={google.busy} onClick={google.connect} className="lumo-pill shrink-0 px-3 h-6 rounded-full text-white font-semibold disabled:opacity-50">
-              {google.busy ? 'Aguardando o navegador…' : 'Conectar'}
+              {google.busy ? 'Aguardando o navegador…' : 'Entrar com Google'}
             </button>
           )}
           {g?.connected && (
@@ -427,7 +487,7 @@ function AccountsPage({ settings: s, onChange, google, onOpen }: Pick<Props, 'se
         </p>
       )}
       {google.busy && !g?.connected && (
-        <p className={`${hintCls} pl-[84px]`}>Termine o login na aba que abriu no navegador (até 3 min).</p>
+        <p className={`${hintCls} pl-[84px]`}>Escolha sua conta na aba que abriu no navegador (até 3 min).</p>
       )}
 
       {g?.connected && (
@@ -452,7 +512,8 @@ function AccountsPage({ settings: s, onChange, google, onOpen }: Pick<Props, 'se
       {showForm && (
         <form ref={formRef} onSubmit={save} data-anim="item" className="mt-1 p-2 rounded-xl bg-surface-2 border border-white/5 space-y-1.5">
           <p className={hintCls}>
-            Uma vez só: no Google Cloud crie um projeto, ative a{' '}
+            Para o login ser só “escolher a conta”, o app precisa de um cliente OAuth embutido: salve o JSON baixado do Google Cloud em{' '}
+            <code>src-tauri/google-client.json</code> e recompile (aí ninguém mais vê esta tela). Sem isso, faça aqui uma vez: no Google Cloud crie um projeto, ative a{' '}
             <button type="button" onClick={() => onOpen(GMAIL_API)} className="underline text-slate-300 hover:text-white">
               API do Gmail
             </button>{' '}
@@ -460,8 +521,8 @@ function AccountsPage({ settings: s, onChange, google, onOpen }: Pick<Props, 'se
             <button type="button" onClick={() => onOpen(GOOGLE_CONSOLE)} className="underline text-slate-300 hover:text-white">
               Credenciais
             </button>{' '}
-            crie um “ID do cliente OAuth” do tipo <b className="text-slate-300">App para computador</b>. Na tela de consentimento,
-            adicione seu e-mail como usuário de teste.
+            crie um “ID do cliente OAuth” do tipo <b className="text-slate-300">App para computador</b>, adicione seu e-mail como
+            usuário de teste e cole o ID (ou o JSON inteiro) abaixo.
           </p>
           <div className="flex gap-1.5">
             <input

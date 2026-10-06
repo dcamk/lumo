@@ -56,7 +56,7 @@ pub fn notify(app: AppHandle, title: String, body: String) -> Result<(), String>
 
 // ---- Iniciar com o sistema (XDG autostart) ----------------------------------
 // Implementação própria: o plugin oficial grava o caminho sem aspas, o que quebra
-// quando ele tem espaços/parênteses (ex.: "minha pasta (1)").
+// quando ele tem espaços/parênteses (ex.: "lumo-desktop-limpo (1)").
 
 fn autostart_file() -> Option<std::path::PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")

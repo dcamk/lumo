@@ -164,7 +164,6 @@ export function ChatTab({ items, loading, providerLabel, onSend, onApprove, onSt
             {m.kind === 'assistant' && (
               <div className="max-w-[90%] px-2.5 py-1.5 rounded-xl bg-surface-2 text-slate-300 leading-relaxed whitespace-pre-wrap select-text">
                 <RichText text={m.text} />
-                {m.via && <span className="block pt-0.5 text-[9px] text-slate-500">respondido via {m.via}</span>}
               </div>
             )}
             {m.kind === 'notice' && <p className="text-[10px] text-slate-500 italic px-1">{m.text}</p>}
@@ -188,7 +187,7 @@ export function ChatTab({ items, loading, providerLabel, onSend, onApprove, onSt
           type="text"
           aria-label="Mensagem para o Lumo"
           placeholder="Peça algo ao Lumo…"
-          title={`Provedor preferido: ${providerLabel} (troca sozinho se ele não responder)`}
+          title={`Modelo preferido: ${providerLabel} — o Lumo escolhe e troca de modelo sozinho`}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);

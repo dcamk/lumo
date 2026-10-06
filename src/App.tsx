@@ -13,6 +13,7 @@ import { MailTab } from './components/tabs/MailTab';
 import { SettingsPageSwitch, SettingsTab, type SettingsPage } from './components/tabs/SettingsTab';
 import { TasksTab } from './components/tabs/TasksTab';
 import { useAudioUnlock } from './hooks/useAudioUnlock';
+import { useBrain } from './hooks/useBrain';
 import { useChat } from './hooks/useChat';
 import { useEmotion } from './hooks/useEmotion';
 import { useFileDrop } from './hooks/useFileDrop';
@@ -108,6 +109,11 @@ export default function App() {
   });
 
   // ---- chat --------------------------------------------------------------------------------
+  const brain = useBrain(settings, tab === 'settings' && settingsPage === 'ia');
+  // Painel no chat: aquece o modelo local para a primeira resposta não esperar o carregamento
+  useEffect(() => {
+    if (tab === 'chat') void tryInvoke('brain_warm');
+  }, [tab]);
   const chat = useChat(settings, (ok) => {
     if (ok) {
       sound.playChirp();
@@ -594,7 +600,7 @@ export default function App() {
               />
             )}
             {tab === 'settings' && (
-              <SettingsTab page={settingsPage} settings={settings} onChange={updateSettings} google={google} onOpen={openUrl} />
+              <SettingsTab page={settingsPage} settings={settings} onChange={updateSettings} google={google} onOpen={openUrl} brain={brain} />
             )}
           </QuickPanel>
         )}

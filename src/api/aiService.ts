@@ -64,12 +64,6 @@ export async function streamChat(
   onChunk(data.reply || 'Sem resposta.');
 }
 
-/** Vale a pena tentar outro provedor? (limite, servidor fora, sem conexão, sem chave) */
-export function isRetryable(err: unknown) {
-  const msg = String(err instanceof Error ? err.message : err);
-  return /HTTP (4\d\d|5\d\d)|conectar|connect|timed? ?out|tempo esgotado|quota|não configurada|not found|unavailable/i.test(msg);
-}
-
 /** Modelos de um provedor compatível com OpenAI */
 export async function listModels(settings: Settings, provider: ProviderId) {
   const preset = presetOf(provider);

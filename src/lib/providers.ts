@@ -182,33 +182,3 @@ export function providerReady(settings: Settings, id: ProviderId) {
   if (preset.editableBase && !cfg.endpoint) return false;
   return preset.keyless || cfg.apiKey.trim().length > 0;
 }
-
-/**
- * Ordem de tentativas: o escolhido primeiro; com "tentar outro provedor" ligado,
- * depois os gratuitos prontos para uso (o Ollama local fica de fora: pode não estar rodando).
- */
-export function fallbackChain(settings: Settings): ProviderId[] {
-  const chain: ProviderId[] = [settings.provider];
-  if (!settings.aiFallback) return chain;
-  for (const p of PROVIDERS) {
-    if (p.group === 'free' && p.id !== settings.provider && providerReady(settings, p.id)) chain.push(p.id);
-  }
-  return chain.slice(0, 4);
-}
-
-/**
- * Como o agente (IA com terminal) conversa com cada provedor:
- * 'openai' = ferramentas nativas · 'claude' = tool_use · 'text' = bloco <run> (sem ferramentas).
- * Gemini e Ollama também têm endpoint compatível com OpenAI, com ferramentas.
- */
-export function agentTarget(settings: Settings, id: ProviderId, model?: string) {
-  const preset = presetOf(id);
-  const cfg = { ...providerConfig(settings, id), ...(model ? { model } : {}) };
-  let format: 'openai' | 'claude' | 'text' = 'openai';
-  let endpoint = cfg.endpoint;
-  if (preset.kind === 'claude') format = 'claude';
-  else if (id === 'llm7') format = 'text'; // sem chave o LLM7 não usa ferramentas
-  else if (preset.kind === 'gemini') endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai';
-  else if (preset.kind === 'ollama') endpoint = `${cfg.endpoint.replace(/\/+$/, '')}/v1`;
-  return { format, label: preset.label, endpoint, api_key: cfg.apiKey, model: cfg.model };
-}
