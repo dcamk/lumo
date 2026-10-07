@@ -24,6 +24,13 @@ tauri-plugin-single-instance = "2"
 zbus = "5"
 sha2 = "0.10"
 base64 = "0.22"
+# Ponte Lumo (celular/tablet na rede local)
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Mesma versão usada internamente pelo Tauri/wry (ajustes de áudio do WebKitGTK)

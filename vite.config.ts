@@ -14,6 +14,16 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    // Duas páginas: o app do PC (index.html) e o app do celular/tablet (mobile/), que a
+    // Ponte Lumo serve na rede local. Os assets ficam juntos em dist/assets.
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          mobile: path.resolve(__dirname, 'mobile/index.html'),
+        },
+      },
+    },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

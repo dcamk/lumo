@@ -28,6 +28,7 @@
   },
   "include": [
     "src",
+    "mobile/src",
     "server.ts",
     "vite.config.ts"
   ],

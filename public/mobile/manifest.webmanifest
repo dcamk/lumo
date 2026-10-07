@@ -1,0 +1,16 @@
+{
+  "name": "Lumo",
+  "short_name": "Lumo",
+  "description": "O Lumo do seu PC no celular: chat com a IA do PC, arquivos e controle pela rede local.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0f13",
+  "theme_color": "#0d0f13",
+  "icons": [
+    { "src": "/icon-256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

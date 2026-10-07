@@ -2,6 +2,7 @@
 
 mod agent;
 mod brain;
+mod bridge;
 mod api;
 mod audio;
 mod cursor;
@@ -161,10 +162,16 @@ fn main() {
             system::set_autostart,
             system::shortcut_status,
             system::set_shortcut,
-            system::frontend_log
+            system::frontend_log,
+            bridge::bridge_status,
+            bridge::bridge_set,
+            bridge::bridge_new_pin,
+            bridge::bridge_forget,
+            bridge::bridge_open_shared
         ])
         .setup(|app| {
             brain::init(app.handle());
+            bridge::init(app.handle());
             system::build_tray(app.handle()).ok();
             system::refresh_autostart();
             // GNOME: atalho do próprio sistema (funciona com qualquer app em foco).

@@ -9,15 +9,17 @@ import { GROUP_LABEL, PROVIDERS, presetOf, providerConfig } from '../../lib/prov
 import { invoke, isTauri, tryInvoke } from '../../lib/tauri';
 import type { PoolSlot } from '../../hooks/useBrain';
 import { AgentPage } from './AgentPage';
+import { PhonePage } from './PhonePage';
 import type { CursorMode, ProviderConfig, ProviderId, Settings } from '../../types';
 
-export type SettingsPage = 'geral' | 'ia' | 'agente' | 'contas' | 'sistema';
+export type SettingsPage = 'geral' | 'ia' | 'agente' | 'contas' | 'celular' | 'sistema';
 
 const PAGES: { key: SettingsPage; label: string }[] = [
   { key: 'geral', label: 'Geral' },
   { key: 'ia', label: 'IA' },
   { key: 'agente', label: 'Agente' },
   { key: 'contas', label: 'Contas' },
+  { key: 'celular', label: 'Celular' },
   { key: 'sistema', label: 'Sistema' },
 ];
 
@@ -90,6 +92,7 @@ export function SettingsTab({ page, settings, onChange, google, onOpen, brain }:
       {page === 'ia' && <AIPage settings={settings} onChange={onChange} onOpen={onOpen} brain={brain} />}
       {page === 'agente' && <AgentPage />}
       {page === 'contas' && <AccountsPage settings={settings} onChange={onChange} google={google} onOpen={onOpen} />}
+      {page === 'celular' && <PhonePage />}
       {page === 'sistema' && <SystemPage settings={settings} onChange={onChange} />}
     </div>
   );
