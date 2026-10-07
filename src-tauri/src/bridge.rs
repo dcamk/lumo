@@ -2,7 +2,7 @@
 //
 // O PC serve o app móvel (pasta dist/mobile) e uma API pequena em http://<ip>:4646.
 // O celular usa a IA configurada AQUI (as chaves nunca saem do PC), troca arquivos pela
-// pasta compartilhada e controla mídia, links e área de transferência.
+// nuvem pessoal guardada no PC (cloud.rs) e controla mídia, links e área de transferência.
 //
 // Segurança:
 //   • desligada por padrão; só sobe quando o usuário liga em Config → Celular;
@@ -15,7 +15,7 @@
 use crate::agent::{self, AgentEvent};
 use crate::brain::orchestrator::{self, SendReq};
 use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, Path as UrlPath, Query, Request};
+use axum::extract::{DefaultBodyLimit, Query, Request};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -73,7 +73,7 @@ fn state() -> std::sync::MutexGuard<'static, State> {
     STATE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
@@ -122,25 +122,15 @@ fn persist(s: &State) {
     }
 }
 
-fn changed() {
+pub(crate) fn changed() {
     if let Some(app) = APP.get() {
         app.emit("bridge-changed", ()).ok();
     }
 }
 
-/// Pasta trocada com o celular: ~/Downloads/Lumo (no idioma do sistema)
+/// Pasta da nuvem do celular neste PC (~/Lumo Nuvem)
 pub fn shared_dir() -> PathBuf {
-    let downloads = std::process::Command::new("xdg-user-dir")
-        .arg("DOWNLOAD")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|p| !p.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())).join("Downloads"));
-    let dir = downloads.join("Lumo");
-    std::fs::create_dir_all(&dir).ok();
-    dir
+    crate::cloud::root()
 }
 
 /// Endereços IPv4 da rede local deste PC (o primeiro é o da rota padrão)
@@ -354,8 +344,14 @@ fn router() -> Router {
         .route("/api/open", post(api_open))
         .route("/api/clipboard", get(api_clip_get).post(api_clip_set))
         .route("/api/ping", post(api_ping))
-        .route("/api/files", get(api_files).post(api_upload).layer(DefaultBodyLimit::disable()))
-        .route("/api/files/{name}", get(api_download))
+        .route("/api/cloud/list", get(crate::cloud::api_list))
+        .route("/api/cloud/file", get(crate::cloud::api_file))
+        .route("/api/cloud/upload", post(crate::cloud::api_upload).layer(DefaultBodyLimit::disable()))
+        .route("/api/cloud/mkdir", post(crate::cloud::api_mkdir))
+        .route("/api/cloud/rename", post(crate::cloud::api_rename))
+        .route("/api/cloud/delete", post(crate::cloud::api_delete))
+        .route("/api/db/{collection}", get(crate::cloud::api_db_list))
+        .route("/api/db/{collection}/{id}", axum::routing::put(crate::cloud::api_db_put).delete(crate::cloud::api_db_delete))
         .route("/api/unpair", post(api_unpair))
         .layer(middleware::from_fn(auth));
     Router::new()
@@ -367,7 +363,7 @@ fn router() -> Router {
         .layer(tower_http::cors::CorsLayer::permissive())
 }
 
-fn err(code: StatusCode, msg: &str) -> Response {
+pub(crate) fn err(code: StatusCode, msg: &str) -> Response {
     (code, Json(json!({ "error": msg }))).into_response()
 }
 
@@ -378,7 +374,7 @@ struct TokenQuery {
 
 /// Id do aparelho autenticado (extensão do pedido)
 #[derive(Clone)]
-struct DeviceId(String);
+pub(crate) struct DeviceId(pub(crate) String);
 
 async fn auth(Query(q): Query<TokenQuery>, headers: HeaderMap, mut req: Request, next: Next) -> Response {
     let token = headers
@@ -458,7 +454,7 @@ async fn api_unpair(axum::Extension(DeviceId(id)): axum::Extension<DeviceId>) ->
     Json(json!({ "ok": true })).into_response()
 }
 
-fn notify(title: &str, body: &str) {
+pub(crate) fn notify(title: &str, body: &str) {
     if let Some(app) = APP.get() {
         crate::system::notify(app.clone(), title.into(), body.into()).ok();
     }
@@ -653,151 +649,9 @@ async fn api_ping(axum::Extension(DeviceId(id)): axum::Extension<DeviceId>, Json
     Json(json!({ "ok": true })).into_response()
 }
 
-// ---- Arquivos ---------------------------------------------------------------------------
-
-/// Só o nome do arquivo, sem pastas nem caracteres de controle
-fn safe_name(raw: &str) -> Option<String> {
-    let base = raw.rsplit(['/', '\\']).next().unwrap_or("");
-    let clean: String = base.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
-    let clean: String = clean.chars().take(180).collect();
-    if clean.is_empty() || clean == "." || clean == ".." || clean.starts_with('.') {
-        return None;
-    }
-    Some(clean)
-}
-
-/// "foto.jpg" → "foto (1).jpg" se já existir
-fn unique_path(dir: &std::path::Path, name: &str) -> PathBuf {
-    let first = dir.join(name);
-    if !first.exists() {
-        return first;
-    }
-    let (stem, ext) = match name.rfind('.') {
-        Some(i) if i > 0 => (&name[..i], &name[i..]),
-        _ => (name, ""),
-    };
-    (1..10_000).map(|n| dir.join(format!("{} ({}){}", stem, n, ext))).find(|p| !p.exists()).unwrap_or(first)
-}
-
-#[derive(Serialize)]
-struct FileEntry {
-    name: String,
-    size: u64,
-    modified: u64,
-}
-
-async fn api_files() -> Response {
-    let dir = shared_dir();
-    let mut files: Vec<FileEntry> = std::fs::read_dir(&dir)
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .filter_map(|e| {
-                    let meta = e.metadata().ok()?;
-                    let name = e.file_name().to_string_lossy().into_owned();
-                    (meta.is_file() && !name.starts_with('.')).then(|| FileEntry {
-                        name,
-                        size: meta.len(),
-                        modified: meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    files.sort_by(|a, b| b.modified.cmp(&a.modified));
-    Json(json!({ "dir": dir.to_string_lossy(), "files": files })).into_response()
-}
-
-async fn api_download(UrlPath(name): UrlPath<String>) -> Response {
-    let Some(name) = safe_name(&name) else {
-        return err(StatusCode::BAD_REQUEST, "nome inválido");
-    };
-    let path = shared_dir().join(&name);
-    let file = match tokio::fs::File::open(&path).await {
-        Ok(f) => f,
-        Err(_) => return err(StatusCode::NOT_FOUND, "arquivo não encontrado"),
-    };
-    let len = file.metadata().await.map(|m| m.len()).unwrap_or(0);
-    let mime = mime_of(&name);
-    // filename* (RFC 5987) mantém acentos; filename= simples para navegadores antigos
-    let ascii: String = name.chars().map(|c| if c.is_ascii_graphic() || c == ' ' { if c == '"' { '_' } else { c } } else { '_' }).collect();
-    let disposition = format!("attachment; filename=\"{}\"; filename*=UTF-8''{}", ascii, urlencode(&name));
-    Response::builder()
-        .header(header::CONTENT_TYPE, mime)
-        .header(header::CONTENT_LENGTH, len)
-        .header(header::CONTENT_DISPOSITION, disposition)
-        .body(Body::from_stream(tokio_util::io::ReaderStream::new(file)))
-        .unwrap_or_else(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "falha ao enviar"))
-}
-
-fn urlencode(s: &str) -> String {
-    s.bytes()
-        .map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{:02X}", b) })
-        .collect()
-}
-
-fn urldecode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(b);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// Envio do celular: corpo cru do arquivo, nome no cabeçalho `x-file-name` (URL-encoded)
-async fn api_upload(axum::Extension(DeviceId(id)): axum::Extension<DeviceId>, headers: HeaderMap, body: Body) -> Response {
-    let raw = headers.get("x-file-name").and_then(|v| v.to_str().ok()).map(urldecode).unwrap_or_default();
-    let Some(name) = safe_name(&raw) else {
-        return err(StatusCode::BAD_REQUEST, "nome de arquivo inválido");
-    };
-    let dir = shared_dir();
-    let final_path = unique_path(&dir, &name);
-    // Grava num arquivo oculto e só renomeia no fim: envio interrompido não deixa lixo visível
-    let tmp = dir.join(format!(".recebendo-{}-{}", id, now()));
-    let mut file = match tokio::fs::File::create(&tmp).await {
-        Ok(f) => f,
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
-    };
-    let mut stream = body.into_data_stream();
-    let mut size: u64 = 0;
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(c) => c,
-            Err(e) => {
-                tokio::fs::remove_file(&tmp).await.ok();
-                return err(StatusCode::BAD_REQUEST, &format!("envio interrompido: {}", e));
-            }
-        };
-        size += chunk.len() as u64;
-        if let Err(e) = file.write_all(&chunk).await {
-            tokio::fs::remove_file(&tmp).await.ok();
-            return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
-        }
-    }
-    file.flush().await.ok();
-    drop(file);
-    if let Err(e) = tokio::fs::rename(&tmp, &final_path).await {
-        tokio::fs::remove_file(&tmp).await.ok();
-        return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
-    }
-    let saved = final_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(name);
-    notify("Arquivo do celular", &format!("{} salvo em Downloads/Lumo", saved));
-    changed();
-    Json(json!({ "name": saved, "size": size })).into_response()
-}
-
 // ---- App móvel (arquivos estáticos) ------------------------------------------------------
 
-fn mime_of(name: &str) -> &'static str {
+pub(crate) fn mime_of(name: &str) -> &'static str {
     let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         "html" => "text/html; charset=utf-8",
@@ -857,23 +711,6 @@ async fn static_file(req: Request) -> Response {
 mod tests {
     use super::*;
 
-    #[test]
-    fn nomes_seguros() {
-        assert_eq!(safe_name("../../etc/passwd").as_deref(), Some("passwd"));
-        assert_eq!(safe_name("C:\\fotos\\a.jpg").as_deref(), Some("a.jpg"));
-        assert_eq!(safe_name(".bashrc"), None);
-        assert_eq!(safe_name(".."), None);
-        assert_eq!(safe_name("   "), None);
-        assert_eq!(safe_name("Férias 2026.mp4").as_deref(), Some("Férias 2026.mp4"));
-    }
-
-    #[test]
-    fn url_ida_e_volta() {
-        let n = "Relatório final (v2).pdf";
-        assert_eq!(urldecode(&urlencode(n)), n);
-        assert_eq!(urldecode("100%"), "100%");
-    }
-
     /// Ponta a ponta sem o app: sobe o servidor, pareia com o PIN e troca um arquivo
     #[tokio::test]
     async fn pareia_e_troca_arquivo() {
@@ -891,7 +728,7 @@ mod tests {
         assert_eq!(hello["app"], "lumo");
 
         // Sem token: barrado
-        assert_eq!(http.get(format!("{}/api/files", base)).send().await.unwrap().status(), 401);
+        assert_eq!(http.get(format!("{}/api/cloud/list", base)).send().await.unwrap().status(), 401);
         // PIN errado
         let bad = http.post(format!("{}/api/pair", base)).json(&json!({"pin": "000000", "name": "Teste"})).send().await.unwrap();
         assert_eq!(bad.status(), 403);
@@ -902,11 +739,11 @@ mod tests {
         let again = http.post(format!("{}/api/pair", base)).json(&json!({"pin": "123456", "name": "Outro"})).send().await.unwrap();
         assert_eq!(again.status(), 403);
 
-        // Envio com nome malicioso fica preso na pasta compartilhada
+        // Envio com nome malicioso fica preso na nuvem
         let up: serde_json::Value = http
-            .post(format!("{}/api/files", base))
+            .post(format!("{}/api/cloud/upload?path=fotos", base))
             .bearer_auth(&token)
-            .header("x-file-name", urlencode("../../Relatório.txt"))
+            .header("x-file-name", crate::cloud::urlencode("../../Relatório.txt"))
             .body("olá do celular")
             .send()
             .await
@@ -915,18 +752,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(up["name"], "Relatório.txt");
-        assert!(shared_dir().join("Relatório.txt").exists());
+        assert_eq!(up["path"], "fotos/Relatório.txt");
 
-        let list: serde_json::Value = http.get(format!("{}/api/files", base)).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
-        assert_eq!(list["files"][0]["name"], "Relatório.txt");
+        let list: serde_json::Value = http.get(format!("{}/api/cloud/list?path=fotos", base)).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
+        assert_eq!(list["entries"][0]["name"], "Relatório.txt");
+        let fora = http.get(format!("{}/api/cloud/list?path=..", base)).bearer_auth(&token).send().await.unwrap();
+        assert_eq!(fora.status(), 400);
 
         // Download por ?t= (link direto no navegador do celular)
-        let body = http.get(format!("{}/api/files/{}?t={}", base, urlencode("Relatório.txt"), token)).send().await.unwrap().text().await.unwrap();
+        let body = http
+            .get(format!("{}/api/cloud/file?path={}&t={}", base, crate::cloud::urlencode("fotos/Relatório.txt"), token))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
         assert_eq!(body, "olá do celular");
+
+        // Apagar manda para a lixeira da nuvem
+        http.post(format!("{}/api/cloud/delete", base)).bearer_auth(&token).json(&json!({"path": "fotos/Relatório.txt"})).send().await.unwrap();
+        assert!(shared_dir().join(".lixeira/Relatório.txt").exists());
+
+        // Banco de dados: grava, lista, apaga
+        let put = http.put(format!("{}/api/db/notas/n1", base)).bearer_auth(&token).json(&json!({"data": {"texto": "comprar pão"}})).send().await.unwrap();
+        assert_eq!(put.status(), 200);
+        let docs: serde_json::Value = http.get(format!("{}/api/db/notas", base)).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
+        assert_eq!(docs["docs"][0]["data"]["texto"], "comprar pão");
+        http.delete(format!("{}/api/db/notas/n1", base)).bearer_auth(&token).send().await.unwrap();
+        let docs: serde_json::Value = http.get(format!("{}/api/db/notas", base)).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
+        assert_eq!(docs["docs"].as_array().unwrap().len(), 0);
+        assert_eq!(http.put(format!("{}/api/db/..%2Fx/n1", base)).bearer_auth(&token).json(&json!({"data": 1})).send().await.unwrap().status(), 400);
 
         // Desparear derruba o token
         http.post(format!("{}/api/unpair", base)).bearer_auth(&token).send().await.unwrap();
-        assert_eq!(http.get(format!("{}/api/files", base)).bearer_auth(&token).send().await.unwrap().status(), 401);
+        assert_eq!(http.get(format!("{}/api/cloud/list", base)).bearer_auth(&token).send().await.unwrap().status(), 401);
         std::fs::remove_dir_all(&home).ok();
     }
 

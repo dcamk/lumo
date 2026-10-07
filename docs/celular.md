@@ -18,9 +18,10 @@ Funciona em Android e iPhone/iPad pelo navegador, sem instalar nada.
 | --- | --- |
 | **Lumo** | Personagem 3D. Toque (pula), dois toques (gira), segurar (fica feliz, faíscas), arrastar (gira com o dedo), inclinar o aparelho (olha junto), sacudir (fica tonto). Parado um minuto, cochila. Atalhos: perguntar, mandar foto, colar do PC, chamar o PC. |
 | **Chat** | Conversa com o cérebro do PC (mesma memória). Comandos e gravações que a IA quiser fazer no PC pedem aprovação na tela do celular. |
-| **Arquivos** | Manda fotos, vídeos e arquivos para `~/Downloads/Lumo` no PC (com progresso) e baixa o que estiver lá. |
+| **Nuvem** | Nuvem pessoal guardada no PC (`~/Lumo Nuvem`): pastas, envio de fotos e arquivos, download, renomear e apagar (vai para `.lixeira`). Aba **Notas** usa o banco de dados da nuvem (coleções JSON em `.lumo-db/`). |
 | **Controle** | CPU, memória, disco, bateria/temperatura; play/pausa/próxima do player do PC; abrir link no PC; mandar e pegar texto da área de transferência. |
-| **Ajustes** | Modelo 3D (Cubo, Orbe, Cristal, Gota), paleta/personalidade, inclinação, vibração, desconectar. |
+| **Ajustes** | Modo claro/escuro, paleta, modelo 3D (Cubo, Orbe, Cristal, Gota), inclinação, vibração, sempre ligado ao carregar, desconectar. |
+| **Sempre ligado** | Painel de mesa: relógio, Lumo em descanso e o PC; tela não apaga (Wake Lock) e o conteúdo se desloca para não marcar OLED. Na tela de bloqueio e como widget só no app nativo (fase 2). |
 
 O layout se adapta: no celular as abas ficam embaixo; no tablet (768 px ou mais) viram barra
 lateral, e em telas largas o chat mostra o Lumo 3D ao lado. Notch e barras do sistema são
@@ -33,7 +34,7 @@ respeitados (`safe-area`).
 - Cada aparelho recebe um token próprio; só o hash fica em disco (`~/.config/com.lumo.assistant/bridge.json`).
   Dá para remover um aparelho no PC ou desconectar pelo próprio celular.
 - No chat do celular nada roda sem aprovação (o modo automático do PC não vale para o celular).
-- Uploads ficam presos em `~/Downloads/Lumo` (nomes com `../` são limpos).
+- Todo caminho da nuvem fica preso em `~/Lumo Nuvem` (sem `..`, ocultos ou links para fora).
 - **Limite:** é HTTP puro na rede local, sem criptografia. Use em redes de confiança (casa, não Wi-Fi público).
 
 ## Organização do código
@@ -60,8 +61,9 @@ Com `Authorization: Bearer <token>` (ou `?t=` em downloads):
 `GET /api/status`, `POST /api/chat {text}` (NDJSON com os eventos do agente),
 `POST /api/approve {id, approved}`, `POST /api/cancel`, `POST /api/ask {prompt}`,
 `POST /api/media {action}`, `POST /api/open {url}`, `GET|POST /api/clipboard`,
-`POST /api/ping {text}`, `GET /api/files`, `POST /api/files` (corpo cru + `X-File-Name`),
-`GET /api/files/{nome}`, `POST /api/unpair`.
+`POST /api/ping {text}`, `GET /api/cloud/list?path=`, `GET /api/cloud/file?path=`,
+`POST /api/cloud/upload?path=` (corpo cru + `X-File-Name`), `POST /api/cloud/mkdir|rename|delete`,
+`GET /api/db/{coleção}?since=`, `PUT|DELETE /api/db/{coleção}/{id}`, `POST /api/unpair`.
 
 ## Próximo passo: app Android instalável
 

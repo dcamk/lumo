@@ -3,6 +3,7 @@
 mod agent;
 mod brain;
 mod bridge;
+mod cloud;
 mod api;
 mod audio;
 mod cursor;

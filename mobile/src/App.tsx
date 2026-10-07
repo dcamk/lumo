@@ -1,10 +1,13 @@
 // App móvel do Lumo. Celular: abas embaixo. Tablet: barra lateral e, no chat em tela
 // larga, o Lumo 3D ao lado da conversa. Respeita notch e barras do sistema (safe-area).
-import { FolderSync, Gauge, MessageCircle, Settings2, Sparkles } from 'lucide-react';
+import { Cloud as CloudIcon, Gauge, MessageCircle, Settings2, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PALETTES } from '../../src/theme/palettes';
 import { setPalette, usePalette } from '../../src/theme/store';
+import { ParticleField } from './components/ParticleField';
+import { startMotionBus } from './lib/motionBus';
+import { applyTheme } from './lib/theme';
 import { usePc } from './hooks/usePc';
 import { useRemoteChat } from './hooks/useRemoteChat';
 import { Bridge, loadLink, saveLink, setHaptics, type Link } from './lib/bridge';
@@ -12,17 +15,18 @@ import { usePrefs } from './lib/prefs';
 import { Chat } from './screens/Chat';
 import { Connect } from './screens/Connect';
 import { Control } from './screens/Control';
-import { Files } from './screens/Files';
+import { Cloud } from './screens/Cloud';
 import { Home } from './screens/Home';
 import { Settings } from './screens/Settings';
+import { goFullscreen, Standby } from './screens/Standby';
 import { LumoStage, type Mood, type Poke } from './three/LumoStage';
 
-type Tab = 'home' | 'chat' | 'files' | 'control' | 'settings';
+type Tab = 'home' | 'chat' | 'cloud' | 'control' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: typeof Sparkles }[] = [
   { id: 'home', label: 'Lumo', icon: Sparkles },
   { id: 'chat', label: 'Chat', icon: MessageCircle },
-  { id: 'files', label: 'Arquivos', icon: FolderSync },
+  { id: 'cloud', label: 'Nuvem', icon: CloudIcon },
   { id: 'control', label: 'Controle', icon: Gauge },
   { id: 'settings', label: 'Ajustes', icon: Settings2 },
 ];
@@ -50,11 +54,28 @@ export function App() {
   const tablet = useMedia('(min-width: 768px)');
   const large = useMedia('(min-width: 1024px)');
 
-  useEffect(() => setPalette(prefs.palette), [prefs.palette]);
-  useEffect(() => setHaptics(prefs.haptics), [prefs.haptics]);
+  const [standby, setStandby] = useState(false);
+  const [dir, setDir] = useState(1);
+  useEffect(() => startMotionBus(), []);
   useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', PALETTES[prefs.palette].colors.shell);
-  }, [prefs.palette]);
+    setPalette(prefs.palette);
+    applyTheme(PALETTES[prefs.palette], prefs.mode);
+  }, [prefs.palette, prefs.mode]);
+  useEffect(() => setHaptics(prefs.haptics), [prefs.haptics]);
+
+  // Sempre ligado ao carregar (Android: API de bateria)
+  useEffect(() => {
+    if (!prefs.standbyOnCharge) return;
+    const nav = navigator as Navigator & { getBattery?: () => Promise<{ charging: boolean; addEventListener: (e: string, f: () => void) => void; removeEventListener: (e: string, f: () => void) => void }> };
+    let off = () => {};
+    void nav.getBattery?.().then((b) => {
+      const fn = () => b.charging && setStandby(true);
+      fn();
+      b.addEventListener('chargingchange', fn);
+      off = () => b.removeEventListener('chargingchange', fn);
+    });
+    return () => off();
+  }, [prefs.standbyOnCharge]);
 
   const forget = useCallback((reason: string) => {
     saveLink(null);
@@ -90,7 +111,7 @@ export function App() {
   if (!link || !bridge) {
     return (
       <>
-        <div className="m-backdrop" />
+        <ParticleField />
         <Connect
           palette={palette}
           model={prefs.model}
@@ -106,12 +127,19 @@ export function App() {
     );
   }
 
-  const go = (t: Tab) => setTab(t);
+  const go = (t: Tab) => {
+    setDir(TABS.findIndex((x) => x.id === t) >= TABS.findIndex((x) => x.id === tab) ? 1 : -1);
+    setTab(t);
+  };
+  const openStandby = () => {
+    goFullscreen();
+    setStandby(true);
+  };
 
   const screen = (() => {
     switch (tab) {
       case 'home':
-        return <Home bridge={bridge} palette={palette} model={prefs.model} mood={mood} poke={poke} tilt={prefs.tilt} status={pc.status} online={pc.online} wide={tablet} go={go} toast={toast} />;
+        return <Home bridge={bridge} palette={palette} model={prefs.model} mood={mood} poke={poke} tilt={prefs.tilt} status={pc.status} online={pc.online} wide={tablet} go={go} standby={openStandby} toast={toast} />;
       case 'chat': {
         const view = <Chat {...chat} online={pc.online} />;
         if (!large) return view;
@@ -124,8 +152,8 @@ export function App() {
           </div>
         );
       }
-      case 'files':
-        return <Files bridge={bridge} toast={toast} onSent={() => setPoke({ kind: 'hop', n: Date.now() })} />;
+      case 'cloud':
+        return <Cloud bridge={bridge} toast={toast} onSent={() => setPoke({ kind: 'hop', n: Date.now() })} />;
       case 'control':
         return <Control bridge={bridge} status={pc.status} online={pc.online} setMedia={(media) => pc.setStatus((s) => (s ? { ...s, media } : s))} toast={toast} />;
       case 'settings':
@@ -143,11 +171,10 @@ export function App() {
     }
   })();
 
-  const order = TABS.findIndex((t) => t.id === tab);
 
   return (
     <div className="relative flex h-full" style={{ paddingLeft: 'var(--safe-left)', paddingRight: 'var(--safe-right)' }}>
-      <div className="m-backdrop" />
+      <ParticleField />
 
       {tablet && (
         <nav className="relative z-10 flex w-24 shrink-0 flex-col items-center gap-2 border-r border-line py-4" style={{ paddingTop: 'calc(var(--safe-top) + 16px)' }} aria-label="Seções">
@@ -159,23 +186,19 @@ export function App() {
       )}
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        {!tablet && (
-          <header className="flex items-center gap-2 px-4 pb-2" style={{ paddingTop: 'calc(var(--safe-top) + 10px)' }}>
-            <StatusDot online={pc.online} />
-            <span className="truncate text-[14px] font-semibold">{pc.status?.name ?? link.pc}</span>
-            {!pc.online && <span className="text-[12px] text-danger">fora de alcance</span>}
-          </header>
-        )}
+        {!tablet && <div style={{ height: 'calc(var(--safe-top) + 12px)' }} />}
 
         <main className="relative min-h-0 flex-1" style={tablet ? { paddingTop: 'calc(var(--safe-top) + 12px)' } : undefined}>
-          <AnimatePresence mode="wait" initial={false} custom={order}>
+          {/* Transição no sentido da aba (direita/esquerda; no tablet, de cima/baixo) */}
+          <AnimatePresence mode="popLayout" initial={false} custom={dir}>
             <motion.div
               key={tab}
               className="absolute inset-0"
-              initial={{ opacity: 0, x: tablet ? 0 : 24, y: tablet ? 16 : 0, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, x: tablet ? 0 : -24, y: tablet ? -8 : 0, filter: 'blur(4px)' }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              custom={dir}
+              initial={{ opacity: 0, x: tablet ? 0 : 28 * dir, y: tablet ? 20 * dir : 0, scale: 0.99 }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: tablet ? 0 : -28 * dir, y: tablet ? -12 * dir : 0, scale: 0.99 }}
+              transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
             >
               {screen}
             </motion.div>
@@ -190,6 +213,8 @@ export function App() {
           </nav>
         )}
       </div>
+
+      <AnimatePresence>{standby && <Standby palette={palette} model={prefs.model} mood={mood} status={pc.status} online={pc.online} onExit={() => setStandby(false)} />}</AnimatePresence>
 
       <AnimatePresence>
         {toastMsg && (
@@ -214,7 +239,6 @@ export function App() {
 function StatusDot({ online }: { online: boolean }) {
   return (
     <span className="relative flex h-2.5 w-2.5" title={online ? 'Conectado' : 'Sem conexão'}>
-      {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-50" />}
       <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${online ? 'bg-ok' : 'bg-danger'}`} />
     </span>
   );

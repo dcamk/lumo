@@ -41,7 +41,7 @@ export function Chat({ items, phase, send, approve, stop, clear, online }: Props
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-4 pb-2">
-        <h2 className="text-xl font-bold">Chat</h2>
+        <h2 className="text-xl font-semibold tracking-tight">Chat</h2>
         <button type="button" className="m-btn min-h-9 px-3 text-[13px]" onClick={clear} disabled={busy} aria-label="Nova conversa">
           <Trash2 className="h-4 w-4" /> Nova
         </button>

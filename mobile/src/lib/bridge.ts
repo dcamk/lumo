@@ -185,24 +185,24 @@ export class Bridge {
     if (failure) throw new BridgeError(failure, 502);
   }
 
-  /** Envia um arquivo para a pasta compartilhada do PC, com progresso (0–1) */
-  upload(file: File, onProgress: (p: number) => void): Promise<{ name: string; size: number }> {
+  /** Envia um arquivo para uma pasta da nuvem no PC, com progresso (0–1) */
+  upload(file: File, folder: string, onProgress: (p: number) => void): Promise<{ name: string; path: string; size: number }> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', this.url('/api/files'));
+      xhr.open('POST', this.url(`/api/cloud/upload?path=${encodeURIComponent(folder)}`));
       xhr.setRequestHeader('Authorization', `Bearer ${this.link.token}`);
       xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name || 'arquivo'));
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
       xhr.onload = () => {
         if (xhr.status === 401) this.onUnauthorized();
-        let data: { error?: string; name?: string; size?: number } = {};
+        let data: { error?: string } & Partial<{ name: string; path: string; size: number }> = {};
         try {
           data = JSON.parse(xhr.responseText);
         } catch {
           /* sem corpo */
         }
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data as { name: string; size: number });
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data as { name: string; path: string; size: number });
         else reject(new BridgeError(data.error || `HTTP ${xhr.status}`, xhr.status));
       };
       xhr.onerror = () => reject(new BridgeError('A conexão caiu durante o envio.', 0));
@@ -210,9 +210,51 @@ export class Bridge {
     });
   }
 
-  downloadUrl(name: string) {
-    return this.url(`/api/files/${encodeURIComponent(name)}`, true);
+  /** Link direto de um arquivo da nuvem (inline = abrir/mostrar em vez de baixar) */
+  fileUrl(path: string, inline = false) {
+    return this.url(`/api/cloud/file?path=${encodeURIComponent(path)}${inline ? '&inline=1' : ''}`, true);
   }
+
+  list(path: string) {
+    return this.get<CloudList>(`/api/cloud/list?path=${encodeURIComponent(path)}`);
+  }
+
+  // Banco de dados da nuvem (coleções de documentos JSON guardadas no PC)
+  dbList<T>(collection: string, since = 0) {
+    return this.get<{ docs: Doc<T>[]; now: number }>(`/api/db/${collection}?since=${since}`);
+  }
+
+  dbPut<T>(collection: string, id: string, data: T) {
+    return this.request<{ id: string; updated: number }>(`/api/db/${collection}/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ data }) });
+  }
+
+  dbDelete(collection: string, id: string) {
+    return this.request<{ ok: boolean }>(`/api/db/${collection}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+}
+
+export interface CloudEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified: number;
+}
+
+export interface CloudList {
+  path: string;
+  entries: CloudEntry[];
+  /** Bytes usados pela nuvem */
+  used: number;
+  /** Livre no disco do PC */
+  free: number;
+  total: number;
+}
+
+export interface Doc<T> {
+  id: string;
+  data: T;
+  updated: number;
 }
 
 /** Eventos do agente (src-tauri/src/agent.rs), os mesmos do chat do PC */
@@ -256,12 +298,6 @@ export interface PcStatus {
   version: string;
   stats: Stats;
   media: Media | null;
-}
-
-export interface SharedFile {
-  name: string;
-  size: number;
-  modified: number;
 }
 
 export const formatBytes = (n: number) =>

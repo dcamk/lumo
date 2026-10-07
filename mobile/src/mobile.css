@@ -47,6 +47,7 @@ html[data-font="mono"] {
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
+  --color-line-strong: var(--line-strong);
   /* RichText (compartilhado com o PC) usa estas escalas */
   --color-white: var(--text);
   --color-slate-100: color-mix(in srgb, var(--text) 95%, var(--shell));
@@ -71,6 +72,10 @@ button {
   touch-action: manipulation;
 }
 
+html[data-mode="claro"] {
+  color-scheme: light;
+}
+
 /* Fundo vivo: brilho na cor da paleta que respira devagar */
 .m-backdrop {
   position: fixed;
@@ -88,9 +93,9 @@ button {
 }
 
 .m-card {
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 18px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -103,7 +108,7 @@ button {
   min-height: 44px;
   padding: 0 1rem;
   border-radius: 14px;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 15px;
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
@@ -142,6 +147,46 @@ button {
 .m-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.m-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.m-icon-btn:active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.m-row {
+  transition: background 160ms var(--ease-out);
+}
+.m-row:active {
+  background: color-mix(in srgb, var(--surface-3) 70%, transparent);
+}
+.m-sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -12px 40px -12px rgba(0, 0, 0, 0.35);
+}
+.m-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 0.75rem;
+  border-radius: 14px;
+  font-size: 15px;
+  text-align: left;
+}
+.m-sheet-item:active {
+  background: var(--surface-3);
 }
 
 .m-scroll {

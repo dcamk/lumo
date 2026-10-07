@@ -12,12 +12,6 @@ interface Props {
   toast: (t: string) => void;
 }
 
-const uptime = (s: number) => {
-  const h = Math.floor(s / 3600);
-  const d = Math.floor(h / 24);
-  return d ? `${d}d ${h % 24}h` : `${h}h ${Math.floor((s % 3600) / 60)}min`;
-};
-
 export function Control({ bridge, status, online, setMedia, toast }: Props) {
   const s = status?.stats;
   const media = status?.media ?? null;
@@ -71,8 +65,7 @@ export function Control({ bridge, status, online, setMedia, toast }: Props) {
   return (
     <div className="m-scroll flex h-full flex-col gap-4 px-4 pb-4">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-xl font-bold">Controle</h2>
-        {s && <span className="text-[13px] text-muted">ligado há {uptime(s.uptime)}</span>}
+        <h2 className="text-xl font-semibold tracking-tight">Controle</h2>
       </div>
 
       {!online && <p className="m-card border-danger p-3 text-[14px] text-danger">O PC não está respondendo. Ele está ligado e na mesma rede?</p>}

@@ -1,21 +1,23 @@
-// Lumo 3D do celular/tablet. Quatro modelos (cubo, orbe, cristal, gota) com o mesmo rosto
-// e animações pensadas para toque:
-//   • toque: amassa e pula;   • dois toques: gira;   • segurar: fica feliz (faíscas);
-//   • arrastar: gira com o dedo e volta com mola;   • inclinar o aparelho: olha junto;
-//   • sacudir: fica tonto;   • parado um tempo: cochila.
-// Humor vindo de fora (chat): pensando (partículas aceleram, olhar para cima), falando
-// (boca de LED pulsa), feliz, triste.
+// Lumo 3D do celular/tablet, no visual realista do PC: vidro escuro e polido com reflexo
+// do ambiente e olhos de LED. Quatro formas (cubo, orbe, cristal, gota) com o mesmo rosto.
+// Animações sutis:
+//   • toque: um leve afundar e voltar;   • dois toques: uma volta lenta;
+//   • segurar: os olhos acendem mais;   • arrastar: gira com o dedo e volta com mola;
+//   • inclinar o aparelho: acompanha com o olhar;   • sacudir: balança e se recompõe;
+//   • parado um tempo: os olhos baixam a luz (descanso).
+// Humor vindo de fora (chat): pensando, falando, contente, desanimado.
 import { useEffect, useRef } from 'react';
-import type { Palette } from '../../../src/theme/palettes';
+import { mix, type Palette } from '../../../src/theme/palettes';
+import { motion } from '../lib/motionBus';
 
 export type ModelId = 'cubo' | 'orbe' | 'cristal' | 'gota';
 export type Mood = 'idle' | 'thinking' | 'talking' | 'happy' | 'sad';
 
-export const MODELS: { id: ModelId; name: string; hint: string }[] = [
-  { id: 'cubo', name: 'Cubo', hint: 'O Lumo clássico, de vidro e metal' },
-  { id: 'orbe', name: 'Orbe', hint: 'Esfera com anel em órbita' },
-  { id: 'cristal', name: 'Cristal', hint: 'Facetas que brilham na luz' },
-  { id: 'gota', name: 'Gota', hint: 'Gelatina que balança ao toque' },
+export const MODELS: { id: ModelId; name: string }[] = [
+  { id: 'cubo', name: 'Cubo' },
+  { id: 'orbe', name: 'Orbe' },
+  { id: 'cristal', name: 'Cristal' },
+  { id: 'gota', name: 'Gota' },
 ];
 
 export const isModelId = (v: unknown): v is ModelId => MODELS.some((m) => m.id === v);
@@ -31,12 +33,13 @@ interface Props {
   palette: Palette;
   mood?: Mood;
   poke?: Poke | null;
-  /** Aceita toque/arraste (desligue em miniaturas) */
+  /** Aceita toque/arraste (desligue em telas de descanso) */
   interactive?: boolean;
   /** Segue a inclinação do aparelho */
   tilt?: boolean;
+  /** Brilho geral (modo descanso usa menos) */
+  dim?: number;
   className?: string;
-  onInteract?: (what: 'tap' | 'double' | 'hold' | 'shake') => void;
 }
 
 type ThreeNS = typeof import('three');
@@ -54,6 +57,7 @@ function step(s: Spring, target: number, dt: number, k = 120, c = 12) {
 }
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
 interface Live {
   model: ModelId;
@@ -61,7 +65,7 @@ interface Live {
   mood: Mood;
   tilt: boolean;
   interactive: boolean;
-  onInteract?: Props['onInteract'];
+  dim: number;
 }
 
 interface Rig {
@@ -79,43 +83,45 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.setClearColor(0x000000, 0);
   renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:none';
   host.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const envTex = pmrem.fromScene(new RoomEnvironment(), 0.03).texture;
   scene.environment = envTex;
-  scene.environmentIntensity = 0.75;
 
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
-  camera.position.set(0, 0.1, 5);
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+  camera.position.set(0, 0.05, 5);
 
-  const key = new THREE.DirectionalLight(0xffffff, 1.7);
-  key.position.set(2, 3, 4);
-  const rim = new THREE.PointLight(0xffffff, 18, 12, 2);
-  rim.position.set(-2.4, -0.6, -1.5);
-  const fill = new THREE.PointLight(0xffffff, 10, 12, 2);
-  fill.position.set(-2, -1, 2.4);
-  scene.add(key, rim, fill, new THREE.AmbientLight(0xffffff, 0.15));
+  // Luz de estúdio: principal suave, recorte colorido atrás e preenchimento baixo
+  const key = new THREE.DirectionalLight(0xffffff, 1.4);
+  key.position.set(2.5, 3.5, 4);
+  const rim = new THREE.PointLight(0xffffff, 22, 12, 2);
+  rim.position.set(-2.6, 1.2, -2);
+  const fill = new THREE.PointLight(0xffffff, 6, 12, 2);
+  fill.position.set(-2, -1.4, 2.6);
+  scene.add(key, rim, fill, new THREE.AmbientLight(0xffffff, 0.08));
 
-  // Sombra de contato (disco suave sob o personagem)
+  // Sombra de contato
   const shadowCanvas = document.createElement('canvas');
   shadowCanvas.width = shadowCanvas.height = 128;
   const sctx = shadowCanvas.getContext('2d')!;
-  const grad = sctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  const grad = sctx.createRadialGradient(64, 64, 2, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(0,0,0,0.45)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   sctx.fillStyle = grad;
   sctx.fillRect(0, 0, 128, 128);
   const shadowTex = new THREE.CanvasTexture(shadowCanvas);
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.5), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
-  shadow.position.set(0, -1.05, 0);
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.5), shadowMat);
+  shadow.position.set(0, -1.08, 0);
   shadow.rotation.x = -Math.PI / 2;
   scene.add(shadow);
 
-  // root: posição/pulo · spinner: giro e arraste · squash: amassar · body/face
+  // root: posição · spinner: giro e arraste · squash: respiração/afundar · corpo e rosto
   const root = new THREE.Group();
   const spinner = new THREE.Group();
   const squash = new THREE.Group();
@@ -123,29 +129,32 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
   spinner.add(squash);
   scene.add(root);
 
-  const bodyMat = new THREE.MeshPhysicalMaterial({ metalness: 0.5, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 });
-  const accentMat = new THREE.MeshPhysicalMaterial({ metalness: 0.8, roughness: 0.2, emissiveIntensity: 0.6 });
-  const eyeMat = new THREE.MeshBasicMaterial();
-  const haloMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false });
-  const ledMat = new THREE.MeshBasicMaterial({ transparent: true });
+  const bodyMat = new THREE.MeshPhysicalMaterial({ metalness: 0.1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 2.2 });
+  const accentMat = new THREE.MeshPhysicalMaterial({ metalness: 0.9, roughness: 0.18, envMapIntensity: 1.6 });
+  const eyeMat = new THREE.MeshBasicMaterial({ toneMapped: false });
+  const haloMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const ledMat = new THREE.MeshBasicMaterial({ transparent: true, toneMapped: false });
+  const eyeBase = new THREE.Color();
 
-  // Rosto: comum a todos os modelos (a profundidade muda por modelo)
+  // Rosto: comum a todos os modelos
   const face = new THREE.Group();
-  const eyeGeo = new THREE.CapsuleGeometry(0.08, 0.28, 6, 16);
+  const eyeGeo = new THREE.CapsuleGeometry(0.07, 0.26, 6, 16);
   const eyes: import('three').Mesh[] = [];
+  const halos: import('three').Mesh[] = [];
   for (const side of [-1, 1]) {
     const e = new THREE.Mesh(eyeGeo, eyeMat);
-    e.position.set(side * 0.21, 0.1, 0);
+    e.position.set(side * 0.2, 0.1, 0);
     const h = new THREE.Mesh(eyeGeo, haloMat);
-    h.scale.set(1.6, 1.25, 1);
-    h.position.z = -0.01;
+    h.scale.set(1.9, 1.35, 1);
+    h.position.z = -0.012;
     e.add(h);
     face.add(e);
     eyes.push(e);
+    halos.push(h);
   }
-  const mouth = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.32, 4, 12), ledMat);
+  const mouth = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.3, 4, 12), ledMat);
   mouth.rotation.z = Math.PI / 2;
-  mouth.position.set(0, -0.26, 0);
+  mouth.position.set(0, -0.27, 0);
   face.add(mouth);
   squash.add(face);
 
@@ -155,10 +164,7 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
   let blob: { geo: import('three').BufferGeometry; base: Float32Array } | null = null;
 
   function disposeTree(o: import('three').Object3D) {
-    o.traverse((c) => {
-      const m = c as import('three').Mesh;
-      if (m.geometry) m.geometry.dispose();
-    });
+    o.traverse((c) => (c as import('three').Mesh).geometry?.dispose());
   }
 
   function buildModel(id: ModelId) {
@@ -173,44 +179,28 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     body = extra = null;
     blob = null;
     bodyMat.flatShading = false;
-    bodyMat.transmission = 0;
-    bodyMat.roughness = 0.25;
-    bodyMat.metalness = 0.5;
     switch (id) {
       case 'cubo':
-        body = new THREE.Mesh(new RoundedBoxGeometry(1.35, 1.35, 0.95, 8, 0.42), bodyMat);
-        face.position.z = 0.49;
+        body = new THREE.Mesh(new RoundedBoxGeometry(1.35, 1.35, 0.95, 10, 0.42), bodyMat);
+        face.position.z = 0.48;
         break;
       case 'orbe': {
-        body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 48, 32), bodyMat);
-        face.position.z = 0.74;
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.035, 12, 96), accentMat);
-        ring.rotation.set(Math.PI / 2.4, 0, 0.3);
+        body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 64, 48), bodyMat);
+        face.position.z = 0.73;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.016, 12, 128), accentMat);
+        ring.rotation.set(Math.PI / 2.25, 0, 0.22);
         extra = ring;
         break;
       }
       case 'cristal': {
-        const g = new THREE.IcosahedronGeometry(0.88, 0);
         bodyMat.flatShading = true;
-        bodyMat.roughness = 0.08;
-        bodyMat.metalness = 0.15;
-        body = new THREE.Mesh(g, bodyMat);
-        face.position.z = 0.8;
-        // Mini cristais em órbita
-        const shards = new THREE.Group();
-        for (let i = 0; i < 3; i++) {
-          const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), accentMat);
-          const a = (i / 3) * Math.PI * 2;
-          s.position.set(Math.cos(a) * 1.25, Math.sin(a * 2) * 0.25, Math.sin(a) * 1.25);
-          shards.add(s);
-        }
-        extra = shards;
+        body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.88, 0), bodyMat);
+        face.position.z = 0.79;
         break;
       }
       case 'gota': {
-        const g = new THREE.IcosahedronGeometry(0.8, 12);
+        const g = new THREE.IcosahedronGeometry(0.8, 14);
         blob = { geo: g, base: Float32Array.from(g.attributes.position.array as ArrayLike<number>) };
-        bodyMat.roughness = 0.15;
         body = new THREE.Mesh(g, bodyMat);
         face.position.z = 0.78;
         break;
@@ -221,68 +211,54 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     if (extra) spinner.add(extra);
   }
 
-  // ---- partículas ---------------------------------------------------------------------------
-  const COUNT = 90;
+  // ---- partículas: poeira fina em órbita, que acompanha a rolagem --------------------------
+  const COUNT = 46;
   const pos = new Float32Array(COUNT * 3);
-  const seed = Array.from({ length: COUNT }, () => ({ r: 1.2 + Math.random() * 0.9, a: Math.random() * Math.PI * 2, y: (Math.random() - 0.5) * 1.8, s: 0.3 + Math.random() * 0.7 }));
-  const burst = Array.from({ length: COUNT }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0 }));
+  const seed = Array.from({ length: COUNT }, () => ({ r: 1.25 + Math.random() * 1.0, a: Math.random() * Math.PI * 2, y: (Math.random() - 0.5) * 2, s: 0.25 + Math.random() * 0.6 }));
   const pGeo = new THREE.BufferGeometry();
   pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const pMat = new THREE.PointsMaterial({ size: 0.045, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+  const pMat = new THREE.PointsMaterial({ size: 0.026, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   const points = new THREE.Points(pGeo, pMat);
   scene.add(points);
-  let burstLeft = 0;
-
-  function sparkle(n = 60) {
-    burstLeft = 1.4;
-    for (let i = 0; i < Math.min(n, COUNT); i++) {
-      const b = burst[i];
-      const a = Math.random() * Math.PI * 2;
-      const up = Math.random() * Math.PI - Math.PI / 2;
-      const sp = 1.2 + Math.random() * 1.8;
-      b.x = b.y = b.z = 0;
-      b.vx = Math.cos(a) * Math.cos(up) * sp;
-      b.vy = Math.abs(Math.sin(up)) * sp + 0.6;
-      b.vz = Math.sin(a) * Math.cos(up) * sp;
-      b.life = 0.8 + Math.random() * 0.6;
-    }
-  }
 
   function setPalette(p: Palette) {
     const c = p.colors;
-    bodyMat.color.set(c.bodyTop).lerp(new THREE.Color(c.bodyBottom), 0.35);
-    bodyMat.sheen = 0.4;
-    bodyMat.sheenColor = new THREE.Color(c.bodyEdge);
-    accentMat.color.set(c.accent);
-    accentMat.emissive = new THREE.Color(c.accent);
-    eyeMat.color.set(c.eye);
-    haloMat.color.set(c.eye);
-    haloMat.opacity = 0.15 + p.character.eyeGlow * 0.35;
-    ledMat.color.set(c.accent);
+    // Realista: vidro escuro e polido (igual ao modo realista do PC)
+    bodyMat.color.set(mix(c.bodyBottom, '#05070a', 0.55));
+    bodyMat.sheen = 0.25;
+    bodyMat.sheenColor = new THREE.Color(c.accent);
+    accentMat.color.set(c.accent3);
+    // LEDs claros sobre o vidro escuro
+    eyeBase.set(mix(c.accent3, '#ffffff', 0.45));
+    eyeMat.color.copy(eyeBase);
+    haloMat.color.set(c.accent);
+    haloMat.opacity = 0.1 + p.character.eyeGlow * 0.2;
+    ledMat.color.set(c.accent3);
     pMat.color.set(c.accent3);
     rim.color.set(c.accent);
   }
 
   // ---- estado animado -----------------------------------------------------------------------
-  const sq = spring(1); // amassar (1 = normal)
-  const hop = spring(0); // altura do pulo
+  const sq = spring(1);
+  const lift = spring(0);
   const yaw = spring(0);
   const pitch = spring(0);
+  const roll = spring(0);
   const lookX = spring(0);
   const lookY = spring(0);
   const eyeOpen = spring(1);
-  const joy = spring(0); // 0–1: olhos de "feliz" (arcos)
-  let spinLeft = 0;
-  let spinAngle = 0;
-  let dizzy = 0;
-  let blinkAt = performance.now() + 2500;
+  const glow = spring(1);
+  const content = spring(0); // 0–1: olhar contente
+  let spin: { from: number; t: number } | null = null;
+  let spinBase = 0;
+  let boostUntil = 0;
+  let blinkAt = performance.now() + 3000;
   let blinkUntil = 0;
   let lastInput = performance.now();
   let dragYaw = 0;
   let dragPitch = 0;
   let dragging = false;
-  let tiltX = 0;
-  let tiltY = 0;
+  let held = false;
   let pointerX = 0;
   let pointerY = 0;
   let pointerActive = 0;
@@ -290,26 +266,23 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
 
   function poke(kind: Poke['kind']) {
     lastInput = performance.now();
-    if (reduced) {
-      if (kind === 'joy') joy.x = 1;
-      return;
-    }
+    if (reduced) return;
     switch (kind) {
       case 'hop':
-        sq.x = 0.78;
-        hop.v = 3.2;
+        sq.v -= 0.9;
+        lift.v += 0.9;
         break;
       case 'spin':
-        spinLeft = Math.PI * 2;
-        hop.v = 2;
+        if (!spin) spin = { from: spinBase, t: 0 };
         break;
       case 'joy':
-        joy.v = 8;
-        sparkle();
-        hop.v = 2.2;
+        glow.v += 3;
+        lift.v += 0.6;
+        content.v += 3;
+        boostUntil = performance.now() + 1200;
         break;
       case 'nod':
-        pitch.v = 3;
+        pitch.v += 1.6;
         break;
     }
   }
@@ -323,10 +296,6 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
   let lastY = 0;
   let lastTap = 0;
   let holdTimer = 0;
-  let tapTimer = 0;
-  let held = false;
-
-  const emit = (what: 'tap' | 'double' | 'hold' | 'shake') => live.current.onInteract?.(what);
 
   function onDown(e: PointerEvent) {
     if (!live.current.interactive) return;
@@ -339,12 +308,8 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     lastInput = downAt;
     void askTiltPermission();
     holdTimer = window.setTimeout(() => {
-      if (!dragging) {
-        held = true;
-        poke('joy');
-        emit('hold');
-      }
-    }, 550);
+      if (!dragging) held = true;
+    }, 450);
   }
   function onMove(e: PointerEvent) {
     const r = el.getBoundingClientRect();
@@ -352,17 +317,16 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     pointerY = ((e.clientY - r.top) / r.height) * 2 - 1;
     pointerActive = performance.now();
     if (!downAt) return;
-    const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
-    if (dist > 10) {
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 10) {
       dragging = true;
       clearTimeout(holdTimer);
     }
     if (dragging) {
-      dragYaw += (e.clientX - lastX) * 0.012;
-      dragPitch = Math.max(-0.8, Math.min(0.8, dragPitch + (e.clientY - lastY) * 0.008));
+      dragYaw += (e.clientX - lastX) * 0.01;
+      dragPitch = Math.max(-0.6, Math.min(0.6, dragPitch + (e.clientY - lastY) * 0.006));
       yaw.x = dragYaw;
       pitch.x = dragPitch;
-      yaw.v = (e.clientX - lastX) * 0.6;
+      yaw.v = (e.clientX - lastX) * 0.5;
     }
     lastX = e.clientX;
     lastY = e.clientY;
@@ -373,21 +337,18 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     if (downAt && !dragging && !held && quick) {
       const now = performance.now();
       if (now - lastTap < 320) {
-        clearTimeout(tapTimer);
         lastTap = 0;
         poke('spin');
-        emit('double');
       } else {
         lastTap = now;
         poke('hop');
-        tapTimer = window.setTimeout(() => emit('tap'), 330);
       }
     }
     if (dragging) {
-      // Solta: volta para a frente (com o embalo do arraste)
       dragYaw = 0;
       dragPitch = 0;
     }
+    held = false;
     downAt = 0;
     dragging = false;
   }
@@ -408,25 +369,17 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
       /* negado: segue sem inclinação */
     }
   }
-  function onOrient(e: DeviceOrientationEvent) {
-    if (!live.current.tilt || e.gamma == null || e.beta == null) return;
-    tiltX = Math.max(-1, Math.min(1, e.gamma / 35));
-    tiltY = Math.max(-1, Math.min(1, (e.beta - 45) / 35));
-  }
   let lastShake = 0;
   function onMotion(e: DeviceMotionEvent) {
     const a = e.accelerationIncludingGravity ?? e.acceleration;
     if (!a || a.x == null || a.y == null || a.z == null) return;
-    const g = Math.hypot(a.x, a.y, a.z);
     const now = performance.now();
-    if (g > 28 && now - lastShake > 1500) {
+    if (Math.hypot(a.x, a.y, a.z) > 28 && now - lastShake > 1500) {
       lastShake = now;
-      dizzy = 2.2;
       lastInput = now;
-      emit('shake');
+      roll.v += 2.4; // balança uma vez e se recompõe
     }
   }
-  window.addEventListener('deviceorientation', onOrient);
   window.addEventListener('devicemotion', onMotion);
 
   // ---- tamanho -------------------------------------------------------------------------------
@@ -435,7 +388,7 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     const h = host.clientHeight || 1;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    // Telas estreitas (celular em pé): afasta a câmera para caber
+    // Painéis estreitos: afasta a câmera para caber
     camera.position.z = Math.min(10, 5 * Math.max(1, 0.9 / (w / h)));
     camera.updateProjectionMatrix();
   };
@@ -456,109 +409,99 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     t += dt;
-    const { mood } = live.current;
-    const sleepy = now - lastInput > 60_000 && mood === 'idle';
-    const speed = (reduced ? 0.3 : 1) * (mood === 'thinking' ? 2.6 : sleepy ? 0.4 : 1);
+    const { mood, dim } = live.current;
+    const resting = now - lastInput > 60_000 && mood === 'idle';
+    const busy = mood === 'thinking' || now < boostUntil;
+    const calm = reduced ? 0.25 : 1;
 
-    // Flutuar e respirar
-    const float = reduced ? 0 : Math.sin(t * 1.3 * (sleepy ? 0.5 : 1)) * 0.07;
-    step(hop, 0, dt, 60, 4);
-    if (hop.x < 0) {
-      hop.x = 0;
-      if (hop.v < -1) sq.x = Math.min(sq.x, 0.88); // aterrissa e amassa
-      hop.v = Math.abs(hop.v) * 0.25;
+    // Flutuar e respirar, devagar
+    const float = Math.sin(t * 0.9) * 0.045 * calm;
+    step(lift, 0, dt, 70, 9);
+    root.position.y = float + lift.x * 0.3 + (mood === 'sad' ? -0.05 : 0);
+    step(sq, 1, dt, 180, 14);
+    const breathe = 1 + Math.sin(t * 1.4) * 0.008 * calm;
+    const s = Math.max(0.9, Math.min(1.08, sq.x)) * breathe;
+    squash.scale.set(1 / Math.sqrt(s), s, 1 / Math.sqrt(s));
+
+    // Volta lenta (dois toques), com aceleração e frenagem suaves
+    if (spin) {
+      spin.t = Math.min(1, spin.t + dt / 1.6);
+      spinBase = spin.from + easeInOut(spin.t) * Math.PI * 2;
+      if (spin.t >= 1) {
+        spinBase = 0;
+        spin = null;
+      }
     }
-    root.position.y = float + hop.x * 0.35 + (mood === 'sad' ? -0.08 : 0);
-    const breathe = 1 + Math.sin(t * 2.1) * (sleepy ? 0.025 : 0.012);
-    step(sq, 1, dt, 260, 10);
-    const sy = sq.x * breathe;
-    const sxz = 1 / Math.sqrt(Math.max(0.5, sq.x));
-    squash.scale.set(sxz, sy, sxz);
-
-    // Giro (dois toques) e arraste
-    if (spinLeft > 0) {
-      const d = Math.min(spinLeft, dt * 11 * Math.max(0.25, spinLeft / (Math.PI * 2)));
-      spinLeft -= d;
-      spinAngle += d;
-    } else spinAngle = 0;
     if (!dragging) {
-      step(yaw, dragYaw, dt, 40, 6);
-      step(pitch, dragPitch, dt, 40, 6);
+      step(yaw, dragYaw, dt, 30, 7);
+      step(pitch, dragPitch + (mood === 'sad' ? 0.08 : 0), dt, 30, 7);
     }
-    // Tontura: balança em Z, decaindo
-    dizzy = Math.max(0, dizzy - dt);
-    const wobble = dizzy > 0 ? Math.sin(t * 18) * 0.25 * (dizzy / 2.2) : 0;
-    spinner.rotation.set(pitch.x * 0.6, yaw.x + spinAngle, wobble + (mood === 'sad' ? 0.06 : 0));
+    step(roll, 0, dt, 40, 4);
+    spinner.rotation.set(pitch.x * 0.5, yaw.x + spinBase, roll.x * 0.12);
 
-    // Olhar: dedo > inclinação > humor > passeio sozinho
-    let tx = Math.sin(t * 0.35) * 0.25;
-    let ty = Math.sin(t * 0.21) * 0.1;
+    // Olhar: dedo > inclinação > humor > passeio lento
+    let tx = Math.sin(t * 0.23) * 0.2;
+    let ty = Math.sin(t * 0.17) * 0.08;
     if (mood === 'thinking') {
-      tx = 0.35 + Math.sin(t * 2) * 0.1;
-      ty = -0.45;
+      tx = 0.3 + Math.sin(t * 0.8) * 0.06;
+      ty = -0.35;
     }
-    if (live.current.tilt && (tiltX || tiltY)) {
-      tx = tiltX;
-      ty = tiltY;
+    if (live.current.tilt && (motion.tiltX || motion.tiltY)) {
+      tx = motion.tiltX;
+      ty = motion.tiltY;
     }
     if (now - pointerActive < 2500) {
       tx = pointerX;
       ty = pointerY;
     }
-    step(lookX, tx, dt, 50, 9);
-    step(lookY, ty, dt, 50, 9);
-    face.rotation.set(lookY.x * 0.35, lookX.x * 0.5, 0);
-    face.position.x = lookX.x * 0.08;
-    face.position.y = -lookY.x * 0.06;
-    if (body && live.current.model !== 'cubo') body.rotation.set(lookY.x * 0.12, lookX.x * 0.18, 0);
+    step(lookX, tx, dt, 30, 8);
+    step(lookY, ty, dt, 30, 8);
+    face.rotation.set(lookY.x * 0.3, lookX.x * 0.42, 0);
+    face.position.x = lookX.x * 0.06;
+    face.position.y = -lookY.x * 0.045;
+    if (body && live.current.model !== 'cubo') body.rotation.set(lookY.x * 0.1, lookX.x * 0.14, 0);
 
-    // Piscar, cochilar, olhos felizes
+    // Piscar, descanso, contentamento
     if (now > blinkAt) {
-      blinkUntil = now + 120;
-      blinkAt = now + 2000 + Math.random() * 3500;
+      blinkUntil = now + 110;
+      blinkAt = now + 3000 + Math.random() * 4000;
     }
-    const closed = now < blinkUntil || sleepy;
-    step(eyeOpen, closed ? 0.08 : 1, dt, 400, 22);
-    step(joy, mood === 'happy' ? 1 : 0, dt, 30, 8);
-    const happy = Math.max(0, Math.min(1, joy.x));
+    step(eyeOpen, now < blinkUntil ? 0.1 : resting ? 0.45 : 1, dt, 320, 22);
+    step(content, mood === 'happy' ? 1 : 0, dt, 25, 8);
+    const happy = Math.max(0, Math.min(1, content.x));
     for (const [i, e] of eyes.entries()) {
-      const open = eyeOpen.x * (1 - happy * 0.6) * (mood === 'sad' ? 0.7 : 1);
-      e.scale.set(1 + happy * 0.25, Math.max(0.06, open), 1);
-      e.rotation.z = (i === 0 ? 1 : -1) * (happy * 0.35 - (mood === 'sad' ? 0.3 : 0));
-      if (dizzy > 0) e.rotation.z += Math.sin(t * 20 + i * Math.PI) * 0.5;
+      const open = eyeOpen.x * (1 - happy * 0.25) * (mood === 'sad' ? 0.75 : 1);
+      e.scale.set(1, Math.max(0.08, open), 1);
+      e.rotation.z = (i === 0 ? 1 : -1) * (happy * 0.12 - (mood === 'sad' ? 0.14 : 0));
     }
+    // Brilho dos olhos: segurar acende, descanso e humor baixo apagam um pouco
+    step(glow, (held ? 1.6 : resting ? 0.55 : mood === 'sad' ? 0.7 : 1) * dim, dt, 40, 9);
+    eyeMat.color.copy(eyeBase).multiplyScalar(Math.max(0.2, glow.x));
+    for (const h of halos) h.scale.set(1.9 + (glow.x - 1) * 0.6, 1.35 + (glow.x - 1) * 0.3, 1);
 
-    // Boca de LED: fala = pulsa; pensando = varre; feliz = larga
-    let mouthW = 0.7 + happy * 0.5;
-    let mouthOp = 0.55;
+    // Boca de LED: fina; pulsa de leve ao falar
+    let mouthW = 0.7 + happy * 0.25;
+    let mouthOp = 0.4;
     if (mood === 'talking') {
-      mouthW = 0.5 + Math.abs(Math.sin(t * 13) * Math.sin(t * 5.3)) * 0.9;
-      mouthOp = 0.95;
+      mouthW = 0.55 + Math.abs(Math.sin(t * 9) * Math.sin(t * 3.7)) * 0.45;
+      mouthOp = 0.85;
     } else if (mood === 'thinking') {
-      mouthW = 0.35 + (Math.sin(t * 6) * 0.5 + 0.5) * 0.4;
-      mouthOp = 0.8;
-    } else if (sleepy) {
-      mouthW = 0.3;
-      mouthOp = 0.25;
-    }
+      mouthW = 0.45 + (Math.sin(t * 3) * 0.5 + 0.5) * 0.2;
+      mouthOp = 0.6;
+    } else if (resting) mouthOp = 0.15;
     mouth.scale.set(1, mouthW, 1);
-    ledMat.opacity = mouthOp;
+    ledMat.opacity = mouthOp * dim;
 
-    // Extras do modelo
-    if (extra) {
-      extra.rotation.y += dt * 0.6 * speed;
-      if (live.current.model === 'orbe') extra.rotation.z = 0.3 + Math.sin(t * 0.7) * 0.15;
-    }
+    if (extra) extra.rotation.y += dt * (busy ? 0.5 : 0.18) * calm;
     if (blob) {
-      // Gelatina: ondas na superfície, mais fortes depois de um toque
       const arr = blob.geo.attributes.position.array as Float32Array;
-      const amp = 0.03 + Math.min(0.12, Math.abs(1 - sq.x) * 0.6 + Math.abs(hop.v) * 0.015);
+      const amp = 0.018 + Math.min(0.05, Math.abs(1 - sq.x) * 0.4);
       for (let i = 0; i < arr.length; i += 3) {
         const x = blob.base[i];
         const y = blob.base[i + 1];
         const z = blob.base[i + 2];
-        const n = Math.sin(x * 4 + t * 2.4 * speed) * Math.sin(y * 5 + t * 1.9 * speed) * Math.sin(z * 4.5 + t * 2.1);
-        const k = 1 + n * amp * (z > 0.55 ? 0.3 : 1); // rosto quase parado
+        const n = Math.sin(x * 3.2 + t * 1.2 * calm) * Math.sin(y * 3.8 + t * 0.9 * calm) * Math.sin(z * 3.4 + t);
+        const k = 1 + n * amp * (z > 0.55 ? 0.25 : 1);
         arr[i] = x * k;
         arr[i + 1] = y * k;
         arr[i + 2] = z * k;
@@ -567,38 +510,27 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
       blob.geo.computeVertexNormals();
     }
 
-    // Partículas: órbita (mais rápida pensando) ou faíscas da alegria
-    burstLeft = Math.max(0, burstLeft - dt);
+    // Poeira: órbita lenta; rolar a página ou arrastar empurra junto
+    const push = Math.max(-3, Math.min(3, motion.vy * 0.04 + motion.vx * 0.03));
     for (let i = 0; i < COUNT; i++) {
-      const s = seed[i];
-      const b = burst[i];
-      if (b.life > 0) {
-        b.life -= dt;
-        b.vy -= 3.2 * dt;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.z += b.vz * dt;
-        pos[i * 3] = b.x;
-        pos[i * 3 + 1] = b.y + root.position.y;
-        pos[i * 3 + 2] = b.z;
-        continue;
-      }
-      s.a += dt * s.s * 0.4 * speed;
-      pos[i * 3] = Math.cos(s.a) * s.r;
-      pos[i * 3 + 1] = s.y + Math.sin(t * s.s + i) * 0.08;
-      pos[i * 3 + 2] = Math.sin(s.a) * s.r - 0.4;
+      const p = seed[i];
+      p.a += dt * p.s * (busy ? 0.6 : 0.18) * calm + push * dt * p.s;
+      p.y -= motion.vy * 0.0015 * p.s;
+      if (p.y > 1.1) p.y -= 2.2;
+      if (p.y < -1.1) p.y += 2.2;
+      pos[i * 3] = Math.cos(p.a) * p.r;
+      pos[i * 3 + 1] = p.y + Math.sin(t * 0.5 * p.s + i) * 0.05;
+      pos[i * 3 + 2] = Math.sin(p.a) * p.r - 0.4;
     }
     pGeo.attributes.position.needsUpdate = true;
-    pMat.opacity = sleepy ? 0.25 : mood === 'thinking' ? 1 : 0.7;
-    pMat.size = burstLeft > 0 ? 0.07 : 0.045;
+    pMat.opacity = (resting ? 0.2 : busy ? 0.75 : 0.45) * dim;
 
-    shadow.scale.setScalar(1 - root.position.y * 0.4);
-    (shadow.material as import('three').MeshBasicMaterial).opacity = Math.max(0.2, 1 - root.position.y * 0.8);
+    shadow.scale.setScalar(1 - root.position.y * 0.35);
+    shadowMat.opacity = Math.max(0.25, 1 - root.position.y * 0.7) * dim;
 
     renderer.render(scene, camera);
   };
 
-  // Aba escondida: para de desenhar (bateria)
   const onVis = () => {
     cancelAnimationFrame(raf);
     if (!document.hidden) {
@@ -616,10 +548,8 @@ async function createRig(host: HTMLElement, live: { current: Live }): Promise<Ri
     dispose() {
       cancelAnimationFrame(raf);
       clearTimeout(holdTimer);
-      clearTimeout(tapTimer);
       ro.disconnect();
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('deviceorientation', onOrient);
       window.removeEventListener('devicemotion', onMotion);
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
@@ -647,11 +577,11 @@ function webglOk() {
   }
 }
 
-export function LumoStage({ model, palette, mood = 'idle', poke, interactive = true, tilt = true, className, onInteract }: Props) {
+export function LumoStage({ model, palette, mood = 'idle', poke, interactive = true, tilt = true, dim = 1, className }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const rig = useRef<Rig | null>(null);
-  const live = useRef<Live>({ model, palette, mood, tilt, interactive, onInteract });
-  live.current = { model, palette, mood, tilt, interactive, onInteract };
+  const live = useRef<Live>({ model, palette, mood, tilt, interactive, dim });
+  live.current = { model, palette, mood, tilt, interactive, dim };
 
   useEffect(() => {
     if (!host.current || !webglOk()) return;
@@ -674,8 +604,8 @@ export function LumoStage({ model, palette, mood = 'idle', poke, interactive = t
   }, [poke]);
 
   return (
-    <div ref={host} className={className} aria-label="Lumo em 3D. Toque, segure ou arraste." role="img">
-      {!webglOk() && <div className="grid h-full place-items-center text-sm text-muted">Este aparelho não tem WebGL para o Lumo 3D.</div>}
+    <div ref={host} className={className} aria-label="Lumo em 3D" role="img">
+      {!webglOk() && <div className="grid h-full place-items-center text-sm text-muted">Sem WebGL neste aparelho.</div>}
     </div>
   );
 }

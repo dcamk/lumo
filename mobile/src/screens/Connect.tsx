@@ -62,9 +62,9 @@ export function Connect({ palette, model, onLinked, reason }: Props) {
     <div className="relative z-10 mx-auto flex h-full w-full max-w-5xl flex-col items-center justify-center gap-6 px-6 md:flex-row md:gap-12" style={{ paddingTop: 'calc(var(--safe-top) + 16px)', paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
       <LumoStage model={model} palette={palette} poke={poke} mood={busy ? 'thinking' : 'idle'} className="h-[34vh] w-full max-w-sm md:h-[60vh] md:flex-1" />
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 220, damping: 24 }} className="m-card w-full max-w-sm p-6 md:flex-1">
-        <h1 className="text-2xl font-bold">Conectar ao PC</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Conectar ao PC</h1>
         <p className="mt-1 text-[15px] text-muted">
-          No Lumo do computador, abra <b className="text-ink">Config → Celular</b>, ligue a ponte e aponte a câmera para o QR. Ou digite o PIN abaixo.
+          No PC: <b className="text-ink">Config → Celular</b>. Leia o QR ou digite o PIN.
         </p>
 
         <form
@@ -110,7 +110,6 @@ export function Connect({ palette, model, onLinked, reason }: Props) {
             {busy ? 'Conectando…' : 'Conectar'}
           </button>
         </form>
-        <p className="mt-4 text-[13px] text-muted">O celular e o PC precisam estar na mesma rede Wi-Fi.</p>
       </motion.div>
     </div>
   );
