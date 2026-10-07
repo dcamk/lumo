@@ -1,9 +1,7 @@
 # Lumo
 
-Assistente de área de trabalho para Linux: uma pílula preta no topo da tela, com um personagem animado,
-que abre o painel de ferramentas do Lumo. Tarefas com lembretes, foco (Pomodoro), terminal, e-mail,
-painel do sistema e uma **IA com equipe de agentes** que roda comandos, lembra de você e usa skills e
-plugins. Funciona sem chave de API.
+O assistente da sua área de trabalho Linux. Tarefas, foco, e-mail, terminal e sistema num só painel,
+com uma **IA que executa o que você pede**.
 
 
 ## Instalar
