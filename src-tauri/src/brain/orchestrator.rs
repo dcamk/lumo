@@ -64,7 +64,7 @@ fn team_block() -> String {
         Role::Coder => "coder (código e análise técnica)",
         Role::Long => "long (documentos e contextos muito grandes)",
         Role::Fast => "fast (respostas rápidas, resumos, traduções)",
-        Role::Local => "local (dados privados; roda só neste PC)",
+        Role::Local => "local (dados privados; roda só na máquina do usuário)",
         Role::Main => "",
     };
     format!(

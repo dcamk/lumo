@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala (ou atualiza) o Lumo neste PC.
+# Instala (ou atualiza) o Lumo na sua máquina.
 #
 #   ./install.sh            usa o .deb mais recente (compila se não houver)
 #   ./install.sh --build    recompila antes de instalar

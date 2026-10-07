@@ -24,7 +24,7 @@ Depois de instalado: **Ctrl+Alt+L** abre e fecha o painel; o clique direito na b
 
 Config → **IA**. Sem configurar nada, o Lumo usa o LLM7 (sem chave) e os modelos do Ollama que você já
 tiver. Chaves gratuitas extras (Groq, Cerebras, Gemini, Mistral, NVIDIA, OpenRouter, Hugging Face) dão
-mais fôlego; OpenAI e Claude também funcionam. As chaves ficam só neste PC.
+mais fôlego; OpenAI e Claude também funcionam. As chaves ficam na sua máquina.
 
 **Como funciona** (`src-tauri/src/brain/`)
 

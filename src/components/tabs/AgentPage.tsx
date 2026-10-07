@@ -60,7 +60,7 @@ export function AgentPage() {
   return (
     <>
       <p className={hintCls}>
-        O Lumo guarda o que aprende sobre você, segue skills instaladas e usa plugins externos. Tudo fica neste computador.
+        O Lumo guarda o que aprende sobre você, segue skills instaladas e usa plugins externos. Tudo fica na sua máquina.
       </p>
       {kit.error && <p className="text-[10px] text-amber-400 line-clamp-2" title={kit.error}>{kit.error}</p>}
 

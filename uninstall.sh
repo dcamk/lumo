@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove o Lumo deste PC.
+# Remove o Lumo da sua máquina.
 #
 #   ./uninstall.sh          remove o app, o "iniciar com o sistema" e o atalho do GNOME
 #   ./uninstall.sh --purge  também apaga configurações e a conta Google conectada
