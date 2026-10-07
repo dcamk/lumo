@@ -16,7 +16,7 @@ Funciona em Android e iPhone/iPad pelo navegador, sem instalar nada.
 
 | Tela | O que tem |
 | --- | --- |
-| **Lumo** | Personagem 3D. Toque (pula), dois toques (gira), segurar (fica feliz, faíscas), arrastar (gira com o dedo), inclinar o aparelho (olha junto), sacudir (fica tonto). Parado um minuto, cochila. Atalhos: perguntar, mandar foto, colar do PC, chamar o PC. |
+| **Lumo** | Lumo 3D realista (vidro escuro, olhos de LED). Toque: afunda de leve; dois toques: uma volta lenta; segurar: os olhos acendem; arrastar: gira com o dedo; inclinar: acompanha com o olhar; sacudir: balança e se recompõe. Atalhos: perguntar, enviar foto, chamar o PC, sempre ligado. |
 | **Chat** | Conversa com o cérebro do PC (mesma memória). Comandos e gravações que a IA quiser fazer no PC pedem aprovação na tela do celular. |
 | **Nuvem** | Nuvem pessoal guardada no PC (`~/Lumo Nuvem`): pastas, envio de fotos e arquivos, download, renomear e apagar (vai para `.lixeira`). Aba **Notas** usa o banco de dados da nuvem (coleções JSON em `.lumo-db/`). |
 | **Controle** | CPU, memória, disco, bateria/temperatura; play/pausa/próxima do player do PC; abrir link no PC; mandar e pegar texto da área de transferência. |
